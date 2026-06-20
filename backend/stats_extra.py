@@ -724,3 +724,130 @@ def team_match_stats_avg(league_id, team_id):
         "per_match_detail": per_match,
     }
     return jsonify(result)
+
+
+@extra_bp.route("/api/team-match-stats-multi/<int:team_id>", methods=["GET"])
+def team_match_stats_multi(team_id):
+    """
+    Igual que /api/team-match-stats-avg pero buscando en VARIAS ligas a la
+    vez y quedándose con los N partidos más RECIENTES en el tiempo, sin
+    importar de qué competición vengan. Pensado para selecciones
+    nacionales: un equipo puede jugar su partido más reciente en el
+    Mundial, mientras que la mayoría de su historial está en la
+    eliminatoria continental — y lo que el usuario espera de "últimos N
+    partidos" es justamente eso, los más recientes en el calendario real,
+    no los más recientes dentro de una sola competición.
+
+    OJO: el costo en requests escala con la cantidad de league_id pasados,
+    ya que se consulta /fixtures una vez por cada uno (más 1 request por
+    partido finalmente seleccionado para traer sus estadísticas).
+
+    Ejemplo: /api/team-match-stats-multi/2382?league_ids=1,32,34,29,30,31,33,4,10&last_n=10
+    """
+    last_n = int(request.args.get("last_n", 10))
+    if last_n > 20:
+        return jsonify({"error": "last_n máximo permitido: 20 (para cuidar la cuota diaria)."}), 400
+
+    league_ids_param = request.args.get("league_ids", "")
+    try:
+        league_ids = [int(x) for x in league_ids_param.split(",") if x.strip()]
+    except ValueError:
+        return jsonify({"error": "league_ids inválido, esperaba una lista de números separados por coma."}), 400
+    if not league_ids:
+        return jsonify({"error": "Falta el parámetro ?league_ids=1,32,34,..."}), 400
+
+    # 1) Juntar fixtures finalizados de TODAS las competiciones candidatas.
+    all_fixtures = []
+    seen_fixture_ids = set()
+    for lg_id in league_ids:
+        fixtures_data, err = fetch_apisports(
+            "/fixtures",
+            params={"team": team_id, "league": lg_id, "last": last_n, "status": "FT"},
+        )
+        if err:
+            continue  # esta competición puede no tener datos para este equipo; seguimos con las demás
+        for fx in fixtures_data.get("response", []):
+            fid = fx["fixture"]["id"]
+            if fid in seen_fixture_ids:
+                continue
+            seen_fixture_ids.add(fid)
+            all_fixtures.append((lg_id, fx))
+
+    if not all_fixtures:
+        return jsonify({
+            "error": "No se encontraron partidos finalizados para este equipo en ninguna de las competiciones consultadas."
+        }), 404
+
+    # 2) Ordenar TODOS los fixtures juntos por fecha real (lo más reciente
+    # primero) y quedarnos solo con los N más nuevos, sin importar de qué
+    # competición vienen.
+    all_fixtures.sort(key=lambda pair: pair[1]["fixture"]["date"], reverse=True)
+    selected = all_fixtures[:last_n]
+
+    # 3) Traer estadísticas de cada uno de esos partidos seleccionados.
+    totals = defaultdict(float)
+    counts = defaultdict(int)
+    per_match = []
+    leagues_used = set()
+
+    for lg_id, fx in selected:
+        fixture_id = fx["fixture"]["id"]
+        stats_data, err2 = fetch_apisports("/fixtures/statistics", params={"fixture": fixture_id})
+        if err2:
+            continue
+
+        for block in stats_data.get("response", []):
+            if block["team"]["id"] != team_id:
+                continue
+            stats = {item["type"]: item["value"] for item in block.get("statistics", [])}
+
+            def num(key):
+                v = stats.get(key)
+                try:
+                    return float(v)
+                except (TypeError, ValueError):
+                    return None
+
+            row = {
+                "shots_total": num("Total Shots"),
+                "shots_on_goal": num("Shots on Goal"),
+                "corners": num("Corner Kicks"),
+                "fouls": num("Fouls"),
+                "yellow_cards": num("Yellow Cards"),
+                "red_cards": num("Red Cards"),
+            }
+            for key, val in row.items():
+                if val is not None:
+                    totals[key] += val
+                    counts[key] += 1
+
+            leagues_used.add(lg_id)
+            per_match.append({
+                "date": fx["fixture"]["date"][:10],
+                "opponent": (
+                    fx["teams"]["away"]["name"] if fx["teams"]["home"]["id"] == team_id
+                    else fx["teams"]["home"]["name"]
+                ),
+                "league_id": lg_id,
+                **row,
+            })
+
+    if not per_match:
+        return jsonify({
+            "error": "No se pudieron obtener estadísticas detalladas para ninguno de los partidos más recientes encontrados."
+        }), 404
+
+    averages = {
+        key: round(totals[key] / counts[key], 2) if counts[key] else None
+        for key in ["shots_total", "shots_on_goal", "corners", "fouls", "yellow_cards", "red_cards"]
+    }
+
+    result = {
+        "team_id": team_id,
+        "leagues_searched": league_ids,
+        "leagues_used": sorted(leagues_used),
+        "matches_analyzed": len(per_match),
+        "averages_per_match": averages,
+        "per_match_detail": per_match,
+    }
+    return jsonify(result)

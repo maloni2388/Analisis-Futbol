@@ -1,369 +1,835 @@
-"""
-qualifiers.py — Eliminatorias mundialistas por confederación + amistosos
-internacionales, vía API-Football (api-sports.io). football-data.org NO
-cubre esto (solo tiene el torneo final del Mundial/Eurocopa), por eso esta
-parte usa exclusivamente api-sports.io. Requiere APISPORTS_KEY configurada
-(ver stats_extra.py).
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pizarra — Análisis de fútbol</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --field-night:#0B1A12;
+  --field-panel:#142B1E;
+  --field-panel-raised:#1A3326;
+  --field-line:#2B4A37;
+  --chalk:#F4F1E6;
+  --chalk-dim:#A9B8AC;
+  --chalk-faint:#6C7C70;
+  --amber:#E8A23D;
+  --amber-dim:#7A5A28;
+  --grass:#5BAE7C;
+  --grass-dim:#2E5A40;
+  --card-red:#D8553A;
+  --card-red-dim:#5A2E22;
+  --card-yellow:#E8C23D;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  background:var(--field-night);
+  color:var(--chalk);
+  font-family:'Inter',system-ui,sans-serif;
+  min-height:100vh;
+  background-image:
+    repeating-linear-gradient(0deg, transparent, transparent 119px, rgba(244,241,230,0.025) 119px, rgba(244,241,230,0.025) 120px);
+}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 24px 80px;}
 
-ALCANCE: SOLO fútbol masculino, SOLO selección absoluta/adulta.
-- Los league_id de CONFEDERATIONS abajo corresponden específicamente a las
-  ligas "World Cup - Qualification <Confederación>" (sin "Women" en el
-  nombre) — api-sports.io tiene IDs completamente separados para las
-  versiones femeninas (ej: id 880 = "World Cup - Women - Qualification
-  Europe"), así que no hay riesgo de mezcla ahí.
-- Los amistosos (/api/friendlies) sí vienen mezclados en una sola liga
-  ("Friendlies", id 10) con categorías juveniles, femenino y combinados
-  olímpicos, así que se filtran activamente por nombre de equipo (ver
-  is_senior_men) antes de devolver cualquier resultado. Este filtro es
-  incondicional, no hay parámetro para desactivarlo.
+.masthead{
+  display:flex;align-items:flex-end;justify-content:space-between;
+  border-bottom:2px solid var(--field-line);
+  padding-bottom:18px;margin-bottom:24px;flex-wrap:wrap;gap:16px;
+}
+.masthead h1{
+  font-family:'Oswald',sans-serif;font-weight:700;
+  font-size:34px;letter-spacing:0.5px;text-transform:uppercase;
+  color:var(--chalk);
+}
+.masthead h1 span{color:var(--amber);}
+.masthead .sub{font-size:13px;color:var(--chalk-faint);margin-top:4px;letter-spacing:0.3px;}
+.conn-status{
+  display:flex;align-items:center;gap:8px;font-size:12px;
+  font-family:'JetBrains Mono',monospace;color:var(--chalk-dim);
+  padding:6px 12px;border:1px solid var(--field-line);border-radius:3px;
+}
+.conn-dot{width:8px;height:8px;border-radius:50%;background:var(--chalk-faint);flex-shrink:0;}
+.conn-dot.ok{background:var(--grass);box-shadow:0 0 6px var(--grass);}
+.conn-dot.bad{background:var(--card-red);box-shadow:0 0 6px var(--card-red);}
 
-Particularidad importante de esta API: cada confederación etiqueta su
-eliminatoria con un "season" (año) distinto, porque cada una arrancó y
-terminó sus partidos en ventanas de tiempo distintas:
-  - Sudamérica, Asia, CONCACAF, Oceanía: temporada "2026" (terminaron más
-    cerca del propio Mundial 2026)
-  - Europa: temporada "2024" (la fase de grupos UEFA se jugó en 2024-2025)
-  - África: temporada "2023" (arrancó y se definió antes)
-En vez de hardcodear esto (puede no aplicar a futuros ciclos, ej. 2030),
-resolvemos la temporada activa dinámicamente probando candidatos, igual
-que hacemos con football-data.org en backend.py.
+.controls{
+  display:flex;gap:10px;flex-wrap:wrap;margin-bottom:28px;align-items:center;
+}
+.field-select{
+  background:var(--field-panel);border:1px solid var(--field-line);color:var(--chalk);
+  font-family:'JetBrains Mono',monospace;font-size:13px;padding:9px 12px;border-radius:3px;
+  cursor:pointer;letter-spacing:0.3px;
+}
+.field-select:focus{outline:1px solid var(--amber);}
+.field-input{
+  background:var(--field-panel);border:1px solid var(--field-line);color:var(--chalk);
+  font-family:'JetBrains Mono',monospace;font-size:13px;padding:9px 12px;border-radius:3px;
+  flex:1;min-width:160px;
+}
+.field-input::placeholder{color:var(--chalk-faint);}
+.field-input:focus{outline:1px solid var(--amber);}
+.btn{
+  background:var(--amber);color:#241804;border:none;
+  font-family:'Oswald',sans-serif;font-weight:600;font-size:13px;
+  letter-spacing:0.6px;text-transform:uppercase;
+  padding:10px 18px;border-radius:3px;cursor:pointer;
+}
+.btn:hover{background:#f0b157;}
+.btn:active{transform:scale(0.98);}
+.btn.ghost{
+  background:transparent;color:var(--chalk-dim);border:1px solid var(--field-line);
+}
+.btn.ghost:hover{border-color:var(--chalk-faint);color:var(--chalk);}
 
-Endpoints:
-  GET /api/qualifiers/confederations                  -> lista de confederaciones soportadas
-  GET /api/qualifiers/standings/<confed>               -> tabla(s) de la eliminatoria
-  GET /api/qualifiers/matches/<confed>?limit=20         -> partidos recientes de la eliminatoria
-  GET /api/friendlies?limit=20&team=                    -> amistosos internacionales recientes (solo masculino adulto)
-  GET /api/friendlies/upcoming?limit=20&team=           -> próximos amistosos programados (solo masculino adulto)
+.tabs{display:flex;gap:2px;margin-bottom:20px;border-bottom:1px solid var(--field-line);flex-wrap:wrap;}
+.tab{
+  font-family:'Oswald',sans-serif;font-weight:500;font-size:13px;letter-spacing:0.5px;
+  text-transform:uppercase;color:var(--chalk-faint);background:none;border:none;
+  padding:10px 16px;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;
+}
+.tab.active{color:var(--amber);border-bottom-color:var(--amber);}
+.tab:hover:not(.active){color:var(--chalk-dim);}
 
-Ejemplos:
-  /api/qualifiers/standings/south_america
-  /api/qualifiers/matches/europe?limit=10
-  /api/friendlies?team=Argentina&limit=10
-"""
+.panel{display:none;}
+.panel.active{display:block;}
 
-from datetime import datetime, timezone
+.section-label{
+  font-family:'Oswald',sans-serif;font-weight:600;font-size:12px;letter-spacing:1.5px;
+  text-transform:uppercase;color:var(--chalk-faint);margin:28px 0 12px;
+  display:flex;align-items:center;gap:10px;
+}
+.section-label::after{content:'';flex:1;height:1px;background:var(--field-line);}
+.section-label:first-child{margin-top:0;}
 
-from flask import Blueprint, jsonify, request
+table{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:13px;}
+thead th{
+  text-align:left;color:var(--chalk-faint);font-weight:500;font-size:11px;
+  text-transform:uppercase;letter-spacing:0.8px;padding:8px 10px;
+  border-bottom:1px solid var(--field-line);
+}
+thead th.num{text-align:center;}
+tbody td{padding:9px 10px;border-bottom:1px solid rgba(43,74,55,0.5);}
+tbody td.num{text-align:center;}
+tbody tr:hover{background:rgba(91,174,124,0.06);}
+.pos-cell{display:flex;align-items:center;gap:8px;}
+.pos-num{
+  width:20px;text-align:center;color:var(--chalk-faint);font-size:12px;
+}
+.crest{width:18px;height:18px;object-fit:contain;flex-shrink:0;}
+.team-name{color:var(--chalk);}
+.pts{color:var(--amber);font-weight:600;}
+.form-pills{display:flex;gap:3px;}
+.pill{width:16px;height:16px;border-radius:2px;font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:600;}
+.pill.W{background:var(--grass-dim);color:var(--grass);}
+.pill.D{background:var(--field-line);color:var(--chalk-dim);}
+.pill.L{background:var(--card-red-dim);color:var(--card-red);}
 
-from stats_extra import fetch_apisports, is_senior_men
+.group-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin-bottom:8px;}
+.group-card{background:var(--field-panel);border:1px solid var(--field-line);border-radius:4px;padding:14px 16px;}
+.group-card h3{font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:1px;color:var(--amber);margin-bottom:10px;text-transform:uppercase;}
+.group-card table{font-size:12px;}
+.group-card thead th{padding:4px 6px;}
+.group-card tbody td{padding:6px 6px;}
 
-qualifiers_bp = Blueprint("qualifiers", __name__)
+.match-row{
+  display:grid;grid-template-columns:1fr auto auto auto 1fr;align-items:center;gap:14px;
+  padding:12px 14px;border-bottom:1px solid rgba(43,74,55,0.5);font-size:14px;
+}
+.match-row:hover{background:rgba(91,174,124,0.06);}
+.match-team{display:flex;align-items:center;gap:8px;}
+.match-team.away{justify-content:flex-end;text-align:right;flex-direction:row-reverse;}
+.match-score{
+  font-family:'JetBrains Mono',monospace;font-weight:600;font-size:16px;
+  background:var(--field-panel-raised);padding:4px 10px;border-radius:3px;min-width:54px;text-align:center;
+}
+.match-date{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--chalk-faint);text-align:center;}
+.match-stage{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--chalk-faint);text-transform:uppercase;text-align:center;}
 
-# IDs de liga en api-sports.io para cada eliminatoria mundialista por
-# confederación, + temporadas candidatas a probar en orden (la más probable
-# primero, para minimizar requests).
-CONFEDERATIONS = {
-    "europe": {
-        "league_id": 32,
-        "name": "Eliminatoria mundialista — UEFA (Europa)",
-        "season_candidates": [2024, 2025, 2023, 2026],
-    },
-    "south_america": {
-        "league_id": 34,
-        "name": "Eliminatoria mundialista — CONMEBOL (Sudamérica)",
-        "season_candidates": [2026, 2025, 2024, 2023],
-    },
-    "africa": {
-        "league_id": 29,
-        "name": "Eliminatoria mundialista — CAF (África)",
-        "season_candidates": [2023, 2024, 2025, 2026],
-    },
-    "asia": {
-        "league_id": 30,
-        "name": "Eliminatoria mundialista — AFC (Asia)",
-        "season_candidates": [2026, 2025, 2024, 2023],
-    },
-    "concacaf": {
-        "league_id": 31,
-        "name": "Eliminatoria mundialista — CONCACAF (Norte/Centroamérica y Caribe)",
-        "season_candidates": [2026, 2025, 2024, 2023],
-    },
-    "oceania": {
-        "league_id": 33,
-        "name": "Eliminatoria mundialista — OFC (Oceanía)",
-        "season_candidates": [2026, 2025, 2024, 2023],
-    },
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--field-line);border:1px solid var(--field-line);margin-bottom:8px;}
+.stat-box{background:var(--field-panel);padding:18px 16px;}
+.stat-box .label{font-size:11px;color:var(--chalk-faint);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;}
+.stat-box .value{font-family:'Oswald',sans-serif;font-weight:700;font-size:30px;color:var(--chalk);}
+.stat-box .value.amber{color:var(--amber);}
+.stat-box .value.grass{color:var(--grass);}
+.stat-box .value.red{color:var(--card-red);}
+.stat-box .sub{font-size:11px;color:var(--chalk-faint);margin-top:4px;}
+
+.bar-row{display:grid;grid-template-columns:90px 1fr 50px;align-items:center;gap:10px;margin-bottom:10px;font-size:12px;}
+.bar-row .bl{color:var(--chalk-dim);font-family:'JetBrains Mono',monospace;}
+.bar-track{height:8px;background:var(--field-panel-raised);border-radius:2px;overflow:hidden;}
+.bar-fill{height:100%;background:var(--amber);}
+.bar-fill.grass{background:var(--grass);}
+.bar-row .bv{font-family:'JetBrains Mono',monospace;text-align:right;color:var(--chalk);}
+
+.trend-verdict{
+  font-family:'Oswald',sans-serif;font-size:18px;font-weight:600;
+  padding:16px 18px;border-left:3px solid var(--amber);background:var(--field-panel);
+  margin-bottom:20px;letter-spacing:0.2px;
+}
+.trend-verdict.no{border-left-color:var(--chalk-faint);}
+
+.recent-list{font-family:'JetBrains Mono',monospace;font-size:12px;}
+.recent-item{
+  display:grid;grid-template-columns:80px 1fr 60px;gap:10px;padding:7px 10px;
+  border-bottom:1px solid rgba(43,74,55,0.4);align-items:center;
+}
+.recent-item .res{padding:1px 6px;border-radius:2px;font-size:10px;font-weight:600;text-align:center;}
+.recent-item .res.W{background:var(--grass-dim);color:var(--grass);}
+.recent-item .res.D{background:var(--field-line);color:var(--chalk-dim);}
+.recent-item .res.L{background:var(--card-red-dim);color:var(--card-red);}
+
+.bracket{display:flex;gap:24px;overflow-x:auto;padding-bottom:12px;}
+.bracket-stage{min-width:200px;flex-shrink:0;max-height:560px;overflow-y:auto;padding-right:4px;}
+.bracket-stage h4{font-family:'Oswald',sans-serif;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--chalk-faint);margin-bottom:10px;}
+.bracket-match{background:var(--field-panel);border:1px solid var(--field-line);border-radius:3px;padding:8px 10px;margin-bottom:10px;font-size:12px;font-family:'JetBrains Mono',monospace;}
+.bracket-match .bm-team{display:flex;justify-content:space-between;padding:2px 0;}
+.bracket-match .bm-team.winner{color:var(--amber);}
+
+.empty-state{
+  text-align:center;padding:60px 20px;color:var(--chalk-faint);
+  font-family:'JetBrains Mono',monospace;font-size:13px;
+}
+.empty-state i{font-size:32px;display:block;margin-bottom:12px;color:var(--field-line);}
+.loading{
+  text-align:center;padding:50px;color:var(--chalk-faint);
+  font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:0.5px;
+}
+.error-box{
+  background:var(--card-red-dim);border:1px solid var(--card-red);color:#F4D6CE;
+  padding:14px 16px;border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:12px;
+  line-height:1.6;margin-bottom:16px;
+}
+.error-box .err-title{font-weight:600;color:var(--card-red);margin-bottom:4px;font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:0.5px;font-size:12px;}
+
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+@media (max-width:720px){
+  .two-col{grid-template-columns:1fr;}
+  .match-row{grid-template-columns:1fr auto 1fr;}
+  .match-date,.match-stage{display:none;}
 }
 
-FRIENDLIES_LEAGUE_ID = 10  # "Friendlies" (selecciones mayores) en api-sports.io
+footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--field-line);font-size:11px;color:var(--chalk-faint);font-family:'JetBrains Mono',monospace;}
+</style>
+</head>
+<body>
+<div class="wrap">
 
-_season_cache = {}  # confed -> season resuelta, para no re-probar en cada request
+  <div class="masthead">
+    <div>
+      <h1>Pizarra<span>.</span></h1>
+      <div class="sub">Análisis estadístico de fútbol — uso personal, no es asesoramiento financiero</div>
+    </div>
+    <div class="conn-status">
+      <span class="conn-dot" id="connDot"></span>
+      <span id="connText">conectando con backend...</span>
+    </div>
+  </div>
 
+  <div class="controls">
+    <select class="field-select" id="competitionSelect"></select>
+    <input class="field-input" id="teamInput" placeholder="Nombre del equipo (ej: Arsenal)" />
+    <input class="field-input" id="team2Input" placeholder="Rival (solo para Cara a cara, ej: Chelsea)" style="display:none;" />
+    <select class="field-select" id="confedSelect" style="display:none;"></select>
+    <button class="btn" id="loadBtn">Cargar</button>
+    <button class="btn ghost" id="backendUrlBtn" title="Cambiar URL del backend">backend</button>
+  </div>
 
-def _resolve_confed_season(confed_key):
-    """
-    Encuentra la temporada que realmente tiene datos para esta confederación,
-    probando los candidatos en orden. Cachea el resultado en memoria del
-    proceso (no expira: la temporada de un ciclo de eliminatorias ya jugado
-    no cambia retroactivamente).
-    """
-    if confed_key in _season_cache:
-        return _season_cache[confed_key], None
+  <div class="tabs">
+    <button class="tab active" data-tab="standings">Posiciones</button>
+    <button class="tab" data-tab="matches">Partidos</button>
+    <button class="tab" data-tab="trends">Tendencias de equipo</button>
+    <button class="tab" data-tab="h2h">Cara a cara</button>
+    <button class="tab" data-tab="advanced">Remates &amp; tarjetas</button>
+    <button class="tab" data-tab="knockout">Eliminatoria</button>
+    <button class="tab" data-tab="qualifiers">Eliminatorias mundialistas</button>
+    <button class="tab" data-tab="friendlies">Amistosos</button>
+  </div>
 
-    meta = CONFEDERATIONS[confed_key]
-    for season in meta["season_candidates"]:
-        data, err = fetch_apisports(
-            "/standings", params={"league": meta["league_id"], "season": season}
-        )
-        if err:
-            continue
-        if data.get("results", 0) > 0:
-            _season_cache[confed_key] = season
-            return season, None
+  <div class="panel active" id="panel-standings"></div>
+  <div class="panel" id="panel-matches"></div>
+  <div class="panel" id="panel-trends"></div>
+  <div class="panel" id="panel-h2h"></div>
+  <div class="panel" id="panel-advanced"></div>
+  <div class="panel" id="panel-knockout"></div>
+  <div class="panel" id="panel-qualifiers"></div>
+  <div class="panel" id="panel-friendlies"></div>
 
-        # Algunas confederaciones (ej: Oceanía) no exponen standings con
-        # esta estructura de grupos, pero sí tienen fixtures. Confirmamos
-        # con fixtures antes de descartar la temporada.
-        fx_data, fx_err = fetch_apisports(
-            "/fixtures", params={"league": meta["league_id"], "season": season}
-        )
-        if not fx_err and fx_data.get("results", 0) > 0:
-            _season_cache[confed_key] = season
-            return season, None
+  <footer>Datos: football-data.org (ligas, selecciones, fixtures) + api-sports.io (remates, corners, tarjetas). Corré <code>backend.py</code> en local para que esto funcione con datos reales.</footer>
+</div>
 
-    return None, (
-        f"No se encontró una temporada con datos para la eliminatoria de "
-        f"{meta['name']}. Puede que api-sports.io todavía no haya cargado "
-        f"esta eliminatoria para el ciclo actual."
-    )
+<script>
+// Poné acá la URL de tu backend en Render una vez que lo despliegues,
+// por ejemplo: 'https://tu-app.onrender.com'
+// Si lo dejás así (con el placeholder), el dashboard te va a pedir la URL
+// la primera vez y la va a recordar en este navegador para la próxima.
+const DEFAULT_BACKEND_URL = 'https://CAMBIAR-POR-TU-URL-DE-RENDER.onrender.com';
 
+let BACKEND_URL = localStorage.getItem('pizarra_backend_url') || DEFAULT_BACKEND_URL;
+let currentCompetitions = {};
+let currentTab = 'standings';
 
-def _validate_confed(confed_key):
-    confed_key = confed_key.lower().replace("-", "_").replace(" ", "_")
-    if confed_key not in CONFEDERATIONS:
-        valid = ", ".join(CONFEDERATIONS.keys())
-        return None, jsonify({
-            "error": f"Confederación '{confed_key}' no reconocida. Usá una de: {valid}"
-        }), 400
-    return confed_key, None, None
+const competitionSelect = document.getElementById('competitionSelect');
+const teamInput = document.getElementById('teamInput');
+const team2Input = document.getElementById('team2Input');
+const confedSelect = document.getElementById('confedSelect');
+const loadBtn = document.getElementById('loadBtn');
+const connDot = document.getElementById('connDot');
+const connText = document.getElementById('connText');
+const backendUrlBtn = document.getElementById('backendUrlBtn');
 
+const CONFEDERATIONS_STATIC = {
+  south_america: 'CONMEBOL (Sudamérica)',
+  europe: 'UEFA (Europa)',
+  africa: 'CAF (África)',
+  asia: 'AFC (Asia)',
+  concacaf: 'CONCACAF (Norte/Centroamérica y Caribe)',
+  oceania: 'OFC (Oceanía)',
+};
+Object.entries(CONFEDERATIONS_STATIC).forEach(([key, label]) => {
+  const opt = document.createElement('option');
+  opt.value = key;
+  opt.textContent = label;
+  confedSelect.appendChild(opt);
+});
 
-@qualifiers_bp.route("/api/qualifiers/confederations", methods=["GET"])
-def list_confederations():
-    return jsonify({
-        key: {"name": meta["name"], "league_id": meta["league_id"]}
-        for key, meta in CONFEDERATIONS.items()
-    })
+const TABS_NEEDING = {
+  standings: { competition: true, team: false, team2: false, confed: false },
+  matches: { competition: true, team: false, team2: false, confed: false },
+  trends: { competition: true, team: true, team2: false, confed: false },
+  h2h: { competition: true, team: true, team2: true, confed: false },
+  advanced: { competition: true, team: true, team2: false, confed: false },
+  knockout: { competition: true, team: false, team2: false, confed: false },
+  qualifiers: { competition: false, team: false, team2: false, confed: true },
+  friendlies: { competition: false, team: true, team2: false, confed: false },
+};
 
+function updateControlsVisibility() {
+  const need = TABS_NEEDING[currentTab] || {};
+  competitionSelect.style.display = need.competition ? '' : 'none';
+  teamInput.style.display = need.team ? '' : 'none';
+  team2Input.style.display = need.team2 ? '' : 'none';
+  confedSelect.style.display = need.confed ? '' : 'none';
+  teamInput.placeholder = currentTab === 'friendlies'
+    ? 'Selección (ej: Argentina) — vacío trae las más recientes'
+    : 'Nombre del equipo (ej: Arsenal)';
+}
 
-@qualifiers_bp.route("/api/qualifiers/standings/<confed>", methods=["GET"])
-def qualifiers_standings(confed):
-    """
-    Tabla de posiciones de la eliminatoria mundialista de una confederación.
-    Puede venir en un solo grupo (ej: Sudamérica, que juega todos contra
-    todos) o en varios grupos (ej: algunas eliminatorias asiáticas/africanas
-    por zonas). Devolvemos siempre una lista de grupos para ser consistentes,
-    aunque tenga uno solo.
-    """
-    confed, err_resp, status = _validate_confed(confed)
-    if err_resp:
-        return err_resp, status
+backendUrlBtn.addEventListener('click', () => {
+  const next = prompt('URL de tu backend (Render u otro):', BACKEND_URL);
+  if (next) {
+    BACKEND_URL = next.replace(/\/$/, '');
+    localStorage.setItem('pizarra_backend_url', BACKEND_URL);
+    backendUrlBtn.textContent = 'backend: ' + BACKEND_URL.replace(/^https?:\/\//, '');
+    init();
+  }
+});
 
-    season = request.args.get("season")
-    if not season:
-        season, err = _resolve_confed_season(confed)
-        if err:
-            return jsonify({"error": err}), 502
-    else:
-        season = int(season)
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    currentTab = tab.dataset.tab;
+    document.getElementById('panel-' + currentTab).classList.add('active');
+    updateControlsVisibility();
+    loadCurrentTab();
+  });
+});
 
-    meta = CONFEDERATIONS[confed]
-    data, err = fetch_apisports(
-        "/standings", params={"league": meta["league_id"], "season": season}
-    )
-    if err:
-        return jsonify({"error": err}), 502
+loadBtn.addEventListener('click', loadCurrentTab);
+teamInput.addEventListener('keydown', e => { if (e.key === 'Enter') loadCurrentTab(); });
+team2Input.addEventListener('keydown', e => { if (e.key === 'Enter') loadCurrentTab(); });
 
-    response = data.get("response", [])
-    if not response:
-        return jsonify({
-            "error": (
-                f"Esta confederación no tiene tabla de posiciones en formato "
-                f"de grupos para la temporada {season} (puede que se dispute "
-                f"como liguilla sin standings publicados — probá "
-                f"/api/qualifiers/matches/{confed} para ver los partidos)."
-            )
-        }), 404
+async function apiFetch(path) {
+  const res = await fetch(BACKEND_URL + path);
+  const data = await res.json();
+  if (!res.ok || data.error) {
+    throw new Error(data.error || ('HTTP ' + res.status));
+  }
+  return data;
+}
 
-    raw_groups = response[0]["league"].get("standings", [])
+function errorBox(title, msg) {
+  return `<div class="error-box"><div class="err-title">${escapeHtml(title)}</div>${escapeHtml(msg)}</div>`;
+}
 
-    def serialize_row(row):
-        return {
-            "position": row["rank"],
-            "team": row["team"]["name"],
-            "crest": row["team"].get("logo"),
-            "played": row["all"]["played"],
-            "won": row["all"]["win"],
-            "draw": row["all"]["draw"],
-            "lost": row["all"]["lose"],
-            "goalsFor": row["all"]["goals"]["for"],
-            "goalsAgainst": row["all"]["goals"]["against"],
-            "goalDifference": row["goalsDiff"],
-            "points": row["points"],
-            "form": row.get("form"),
-            "note": row.get("description"),
-        }
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
 
-    groups = [
-        {
-            "group": grp[0].get("group") if grp else None,
-            "table": [serialize_row(r) for r in grp],
-        }
-        for grp in raw_groups
-    ]
+function loadingBox(msg) {
+  return `<div class="loading">${escapeHtml(msg || 'cargando...')}</div>`;
+}
 
-    return jsonify({
-        "confederation": meta["name"],
-        "season": season,
-        "groups": groups,
-    })
+async function init() {
+  if (BACKEND_URL === DEFAULT_BACKEND_URL) {
+    connDot.className = 'conn-dot bad';
+    connText.textContent = 'backend no configurado';
+    document.getElementById('panel-standings').innerHTML = errorBox(
+      'Todavía no configuraste la URL de tu backend',
+      'Tocá el botón "backend" arriba a la derecha y pegá la URL que te dio Render (algo como https://tu-app.onrender.com). Se va a guardar en este navegador para la próxima vez.'
+    );
+    return;
+  }
 
+  connDot.className = 'conn-dot';
+  connText.textContent = 'conectando con backend...';
+  try {
+    const data = await apiFetch('/api/competitions');
+    currentCompetitions = data;
+    connDot.className = 'conn-dot ok';
+    connText.textContent = 'backend conectado';
+    backendUrlBtn.textContent = 'backend: ' + BACKEND_URL.replace(/^https?:\/\//, '');
 
-@qualifiers_bp.route("/api/qualifiers/matches/<confed>", methods=["GET"])
-def qualifiers_matches(confed):
-    """Partidos finalizados recientes de la eliminatoria de una confederación."""
-    confed, err_resp, status = _validate_confed(confed)
-    if err_resp:
-        return err_resp, status
-
-    season = request.args.get("season")
-    limit = int(request.args.get("limit", 20))
-
-    if not season:
-        season, err = _resolve_confed_season(confed)
-        if err:
-            return jsonify({"error": err}), 502
-    else:
-        season = int(season)
-
-    meta = CONFEDERATIONS[confed]
-    data, err = fetch_apisports(
-        "/fixtures",
-        params={"league": meta["league_id"], "season": season, "status": "FT"},
-    )
-    if err:
-        return jsonify({"error": err}), 502
-
-    fixtures = data.get("response", [])
-    fixtures.sort(key=lambda f: f["fixture"]["date"], reverse=True)
-    fixtures = fixtures[:limit]
-
-    matches = [
-        {
-            "id": f["fixture"]["id"],
-            "date": f["fixture"]["date"],
-            "round": f["league"].get("round"),
-            "homeTeam": f["teams"]["home"]["name"],
-            "awayTeam": f["teams"]["away"]["name"],
-            "homeCrest": f["teams"]["home"].get("logo"),
-            "awayCrest": f["teams"]["away"].get("logo"),
-            "homeGoals": f["goals"]["home"],
-            "awayGoals": f["goals"]["away"],
-            "homeGoalsHT": f["score"]["halftime"]["home"],
-            "awayGoalsHT": f["score"]["halftime"]["away"],
-        }
-        for f in fixtures
-    ]
-
-    return jsonify({
-        "confederation": meta["name"],
-        "season": season,
-        "count": len(matches),
-        "matches": matches,
-    })
-
-
-def _serialize_friendly(f):
-    return {
-        "id": f["fixture"]["id"],
-        "date": f["fixture"]["date"],
-        "status": f["fixture"]["status"]["short"],
-        "homeTeam": f["teams"]["home"]["name"],
-        "awayTeam": f["teams"]["away"]["name"],
-        "homeCrest": f["teams"]["home"].get("logo"),
-        "awayCrest": f["teams"]["away"].get("logo"),
-        "homeGoals": f["goals"]["home"],
-        "awayGoals": f["goals"]["away"],
+    competitionSelect.innerHTML = '';
+    const addGroup = (label, obj) => {
+      const og = document.createElement('optgroup');
+      og.label = label;
+      Object.entries(obj).forEach(([code, name]) => {
+        const opt = document.createElement('option');
+        opt.value = code;
+        opt.textContent = name;
+        og.appendChild(opt);
+      });
+      competitionSelect.appendChild(og);
+    };
+    addGroup('Ligas de clubes', data.leagues_de_clubes || {});
+    addGroup('Selecciones y copas', data.selecciones_y_copas || {});
+    if (data.leagues_de_clubes && data.leagues_de_clubes.PL) {
+      competitionSelect.value = 'PL';
     }
 
+    updateControlsVisibility();
+    loadCurrentTab();
+  } catch (err) {
+    connDot.className = 'conn-dot bad';
+    connText.textContent = 'sin conexión';
+    document.getElementById('panel-standings').innerHTML = errorBox(
+      'No se pudo conectar con el backend',
+      `Revisá que la URL sea correcta y que el backend esté desplegado y corriendo: ${BACKEND_URL}. Si recién lo desplegaste en Render, puede tardar 30-50 segundos en "despertar" la primera vez. Detalle: ${err.message}`
+    );
+  }
+}
 
-@qualifiers_bp.route("/api/friendlies", methods=["GET"])
-def friendlies_recent():
-    """
-    Amistosos internacionales recientes (finalizados), SIEMPRE filtrados a
-    selección absoluta masculina — se excluyen categorías juveniles,
-    femenino y combinados olímpicos sin excepción.
-    Filtrá por equipo con ?team=Argentina.
-    """
-    limit = int(request.args.get("limit", 20))
-    team_filter = request.args.get("team", "").strip().lower()
-    season = request.args.get("season", str(datetime.now(timezone.utc).year))
+function loadCurrentTab() {
+  const code = competitionSelect.value;
+  if (currentTab === 'standings') loadStandings(code);
+  else if (currentTab === 'matches') loadMatches(code);
+  else if (currentTab === 'trends') loadTrends(code);
+  else if (currentTab === 'h2h') loadHeadToHead(code);
+  else if (currentTab === 'advanced') loadAdvanced(code);
+  else if (currentTab === 'knockout') loadKnockout(code);
+  else if (currentTab === 'qualifiers') loadQualifiers();
+  else if (currentTab === 'friendlies') loadFriendlies();
+}
 
-    data, err = fetch_apisports(
-        "/fixtures",
-        params={"league": FRIENDLIES_LEAGUE_ID, "season": season, "status": "FT"},
-    )
-    if err:
-        return jsonify({"error": err}), 502
+function formPill(letter) {
+  return `<span class="pill ${letter}">${letter}</span>`;
+}
 
-    fixtures = data.get("response", [])
-    fixtures.sort(key=lambda f: f["fixture"]["date"], reverse=True)
+function renderStandingsTable(table, compact) {
+  let rows = table.map(r => `
+    <tr>
+      <td class="num"><div class="pos-cell"><span class="pos-num">${r.position}</span></div></td>
+      <td><div class="pos-cell">
+        ${r.crest ? `<img class="crest" src="${escapeHtml(r.crest)}" loading="lazy" onerror="this.style.display='none'"/>` : ''}
+        <span class="team-name">${escapeHtml(r.shortName || r.team)}</span>
+      </div></td>
+      <td class="num">${r.played}</td>
+      <td class="num">${r.won}</td>
+      <td class="num">${r.draw}</td>
+      <td class="num">${r.lost}</td>
+      ${compact ? '' : `<td class="num">${r.goalsFor}:${r.goalsAgainst}</td><td class="num">${r.goalDifference > 0 ? '+' : ''}${r.goalDifference}</td>`}
+      <td class="num pts">${r.points}</td>
+      ${compact ? '' : `<td><div class="form-pills">${(r.form || '').split(',').filter(Boolean).map(formPill).join('')}</div></td>`}
+    </tr>`).join('');
 
-    fixtures = [
-        f for f in fixtures
-        if is_senior_men(f["teams"]["home"]["name"]) and is_senior_men(f["teams"]["away"]["name"])
-    ]
-    matches = [_serialize_friendly(f) for f in fixtures]
-    if team_filter:
-        matches = [
-            m for m in matches
-            if team_filter in m["homeTeam"].lower() or team_filter in m["awayTeam"].lower()
-        ]
+  return `
+    <table>
+      <thead><tr>
+        <th class="num">#</th><th>Equipo</th><th class="num">PJ</th><th class="num">G</th>
+        <th class="num">E</th><th class="num">P</th>
+        ${compact ? '' : '<th class="num">GF:GC</th><th class="num">DG</th>'}
+        <th class="num">Pts</th>
+        ${compact ? '' : '<th>Forma</th>'}
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
 
-    matches = matches[:limit]
+async function loadStandings(code) {
+  const panel = document.getElementById('panel-standings');
+  panel.innerHTML = loadingBox('cargando tabla de posiciones...');
+  try {
+    const data = await apiFetch('/api/standings/' + code);
+    if (data.kind === 'league') {
+      panel.innerHTML = `
+        <div class="section-label">${escapeHtml(data.competition)} — temporada ${escapeHtml((data.season && data.season.startDate || '').slice(0,4))}</div>
+        ${renderStandingsTable(data.table)}`;
+    } else {
+      const groups = data.groups || [];
+      if (!groups.length) {
+        panel.innerHTML = `<div class="section-label">${escapeHtml(data.competition)}</div>
+          <div class="empty-state"><i class="ti ti-flag-3"></i>Este torneo está 100% en fase de eliminación directa — mirá la pestaña "Eliminatoria".</div>`;
+        return;
+      }
+      panel.innerHTML = `<div class="section-label">${escapeHtml(data.competition)} — fase de grupos</div>
+        <div class="group-grid">${groups.map(g => `
+          <div class="group-card">
+            <h3>${escapeHtml(g.group || 'Grupo')}</h3>
+            ${renderStandingsTable(g.table, true)}
+          </div>`).join('')}</div>`;
+    }
+  } catch (err) {
+    panel.innerHTML = errorBox('No se pudo cargar la tabla', err.message);
+  }
+}
 
-    return jsonify({
-        "season": season,
-        "count": len(matches),
-        "matches": matches,
-    })
+async function loadMatches(code) {
+  const panel = document.getElementById('panel-matches');
+  panel.innerHTML = loadingBox('cargando partidos recientes...');
+  try {
+    const data = await apiFetch('/api/matches/' + code + '?limit=20');
+    if (!data.matches.length) {
+      panel.innerHTML = `<div class="empty-state"><i class="ti ti-calendar-off"></i>No hay partidos finalizados todavía.</div>`;
+      return;
+    }
+    panel.innerHTML = `
+      <div class="section-label">${escapeHtml(data.competition)} — últimos ${data.count} partidos</div>
+      <div>${data.matches.map(m => `
+        <div class="match-row">
+          <div class="match-team home">${escapeHtml(m.homeTeam)}</div>
+          <div class="match-date">${escapeHtml(m.date.slice(0,10))}</div>
+          <div class="match-score">${m.homeGoals ?? '-'} : ${m.awayGoals ?? '-'}</div>
+          <div class="match-stage">${escapeHtml((m.stage || '').replace(/_/g,' '))}${m.group ? ' · ' + escapeHtml(m.group) : ''}</div>
+          <div class="match-team away">${escapeHtml(m.awayTeam)}</div>
+        </div>`).join('')}</div>`;
+  } catch (err) {
+    panel.innerHTML = errorBox('No se pudieron cargar los partidos', err.message);
+  }
+}
 
+async function loadTrends(code) {
+  const panel = document.getElementById('panel-trends');
+  const team = teamInput.value.trim();
+  if (!team) {
+    panel.innerHTML = `<div class="empty-state"><i class="ti ti-search"></i>Escribí el nombre de un equipo arriba (ej: Arsenal) y tocá "Cargar".</div>`;
+    return;
+  }
+  panel.innerHTML = loadingBox('calculando tendencias de ' + team + '...');
+  try {
+    const data = await apiFetch('/api/team-trends/' + code + '?team=' + encodeURIComponent(team) + '&last_n=20');
+    const isOver = data.tendency_over_2_5_team_goals.startsWith('Sí');
+    panel.innerHTML = `
+      <div class="section-label">${escapeHtml(data.team_matched)} — últimos ${data.sample_size} partidos en ${escapeHtml(code)}</div>
 
-@qualifiers_bp.route("/api/friendlies/upcoming", methods=["GET"])
-def friendlies_upcoming():
-    """
-    Próximos amistosos internacionales programados, SIEMPRE filtrados a
-    selección absoluta masculina (mismo criterio que /api/friendlies).
-    """
-    limit = int(request.args.get("limit", 20))
-    team_filter = request.args.get("team", "").strip().lower()
-    season = request.args.get("season", str(datetime.now(timezone.utc).year))
+      <div class="stat-grid">
+        <div class="stat-box">
+          <div class="label">Goles a favor / partido</div>
+          <div class="value amber">${data.goals_for.avg_per_match}</div>
+        </div>
+        <div class="stat-box">
+          <div class="label">Goles en contra / partido</div>
+          <div class="value">${data.goals_against.avg_per_match}</div>
+        </div>
+        <div class="stat-box">
+          <div class="label">Récord (G-E-P)</div>
+          <div class="value" style="font-size:22px;">${data.record.won}-${data.record.draw}-${data.record.lost}</div>
+        </div>
+        <div class="stat-box">
+          <div class="label">Vallas invictas</div>
+          <div class="value grass">${data.goals_against.clean_sheets_pct}%</div>
+        </div>
+      </div>
 
-    data, err = fetch_apisports(
-        "/fixtures",
-        params={"league": FRIENDLIES_LEAGUE_ID, "season": season, "status": "NS-TBD"},
-    )
-    if err:
-        return jsonify({"error": err}), 502
+      <div class="trend-verdict ${isOver ? '' : 'no'}">
+        ${escapeHtml(data.tendency_over_2_5_team_goals)}
+      </div>
 
-    fixtures = data.get("response", [])
-    fixtures.sort(key=lambda f: f["fixture"]["date"])
+      <div class="section-label">Desglose de goles propios</div>
+      <div class="bar-row">
+        <div class="bl">2+ goles</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${data.goals_for.matches_with_2plus_goals_pct}%"></div></div>
+        <div class="bv">${data.goals_for.matches_with_2plus_goals_pct}%</div>
+      </div>
+      <div class="bar-row">
+        <div class="bl">3+ goles</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${data.goals_for.matches_with_3plus_goals_pct}%"></div></div>
+        <div class="bv">${data.goals_for.matches_with_3plus_goals_pct}%</div>
+      </div>
+      <div class="bar-row">
+        <div class="bl">No anotó</div>
+        <div class="bar-track"><div class="bar-fill grass" style="width:${data.goals_for.failed_to_score_pct}%"></div></div>
+        <div class="bv">${data.goals_for.failed_to_score_pct}%</div>
+      </div>
+      <div class="bar-row">
+        <div class="bl">Ambos anotan</div>
+        <div class="bar-track"><div class="bar-fill grass" style="width:${data.btts_pct}%"></div></div>
+        <div class="bv">${data.btts_pct}%</div>
+      </div>
 
-    fixtures = [
-        f for f in fixtures
-        if is_senior_men(f["teams"]["home"]["name"]) and is_senior_men(f["teams"]["away"]["name"])
-    ]
-    matches = [_serialize_friendly(f) for f in fixtures]
-    if team_filter:
-        matches = [
-            m for m in matches
-            if team_filter in m["homeTeam"].lower() or team_filter in m["awayTeam"].lower()
-        ]
+      <div class="section-label">Goles propios por mitad (promedio)</div>
+      <div class="bar-row">
+        <div class="bl">1er tiempo</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, data.goals_by_half.avg_first_half / 3 * 100)}%"></div></div>
+        <div class="bv">${data.goals_by_half.avg_first_half}</div>
+      </div>
+      <div class="bar-row">
+        <div class="bl">2do tiempo</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, (data.goals_by_half.avg_second_half||0) / 3 * 100)}%"></div></div>
+        <div class="bv">${data.goals_by_half.avg_second_half ?? '—'}</div>
+      </div>
 
-    matches = matches[:limit]
+      <div class="section-label">Últimos partidos</div>
+      <div class="recent-list">${data.recent_matches.map(m => {
+        let res = 'D';
+        if (m.goalsFor > m.goalsAgainst) res = 'W';
+        else if (m.goalsFor < m.goalsAgainst) res = 'L';
+        return `<div class="recent-item">
+          <span class="res ${res}">${res}</span>
+          <span>${escapeHtml(m.venue === 'local' ? 'vs' : '@')} ${escapeHtml(m.opponent)}</span>
+          <span style="text-align:right">${m.goalsFor}-${m.goalsAgainst}</span>
+        </div>`;
+      }).join('')}</div>`;
+  } catch (err) {
+    panel.innerHTML = errorBox('No se pudo calcular la tendencia', err.message);
+  }
+}
 
-    return jsonify({
-        "season": season,
-        "count": len(matches),
-        "matches": matches,
-    })
+async function loadAdvanced(code) {
+  const panel = document.getElementById('panel-advanced');
+  const team = teamInput.value.trim();
+  if (!team) {
+    panel.innerHTML = `<div class="empty-state"><i class="ti ti-search"></i>Escribí el nombre de un equipo arriba (ej: Arsenal) y tocá "Cargar". Esta pestaña usa api-sports.io: hay que tener APISPORTS_KEY configurada en el backend.</div>`;
+    return;
+  }
+  panel.innerHTML = loadingBox('buscando equipo en api-sports.io...');
+  try {
+    const statusData = await apiFetch('/api/apisports/status');
+    if (!statusData.configured) {
+      panel.innerHTML = errorBox('Falta configurar api-sports.io', statusData.message);
+      return;
+    }
+
+    const teamSearch = await apiFetch('/api/apisports/search-team?name=' + encodeURIComponent(team));
+    const exactMatches = teamSearch.results.filter(t => !t.national && t.name.toLowerCase() === team.toLowerCase());
+    const teamMatch = exactMatches[0] || teamSearch.results.filter(t => !t.national)[0];
+    if (!teamMatch) {
+      panel.innerHTML = errorBox('Equipo no encontrado en api-sports.io', `No hay coincidencias para "${team}".`);
+      return;
+    }
+
+    const leagueNameGuess = currentCompetitions.leagues_de_clubes && currentCompetitions.leagues_de_clubes[code];
+    let leagueId = null;
+    if (leagueNameGuess) {
+      const leagueSearch = await apiFetch('/api/apisports/search-league?name=' + encodeURIComponent(leagueNameGuess.split(' (')[0]));
+      const leagueMatch = leagueSearch.results[0];
+      leagueId = leagueMatch ? leagueMatch.id : null;
+    }
+
+    if (!leagueId) {
+      panel.innerHTML = errorBox('No se pudo resolver el ID de liga en api-sports.io', 'Esta competición todavía no tiene mapeo automático a api-sports.io en este prototipo. Probá con una liga de clubes (PL, PD, SA, BL1, FL1).');
+      return;
+    }
+
+    panel.innerHTML = loadingBox('calculando promedios de remates / corners / tarjetas (puede tardar unos segundos)...');
+    const avgData = await apiFetch('/api/team-match-stats-avg/' + leagueId + '/' + teamMatch.id + '?last_n=10');
+    const a = avgData.averages_per_match;
+
+    panel.innerHTML = `
+      <div class="section-label">${escapeHtml(teamMatch.name)} — promedio sobre ${avgData.matches_analyzed} partidos recientes</div>
+
+      <div class="stat-grid">
+        <div class="stat-box"><div class="label">Remates totales</div><div class="value amber">${a.shots_total ?? '—'}</div></div>
+        <div class="stat-box"><div class="label">Remates al arco</div><div class="value">${a.shots_on_goal ?? '—'}</div></div>
+        <div class="stat-box"><div class="label">Corners</div><div class="value grass">${a.corners ?? '—'}</div></div>
+        <div class="stat-box"><div class="label">Faltas</div><div class="value">${a.fouls ?? '—'}</div></div>
+        <div class="stat-box"><div class="label">Tarjetas amarillas</div><div class="value" style="color:var(--card-yellow)">${a.yellow_cards ?? '—'}</div></div>
+        <div class="stat-box"><div class="label">Tarjetas rojas</div><div class="value red">${a.red_cards ?? 0}</div></div>
+      </div>
+
+      <div class="section-label">Detalle por partido</div>
+      <table>
+        <thead><tr>
+          <th>Fecha</th><th>Rival</th><th class="num">Remates</th><th class="num">Al arco</th>
+          <th class="num">Corners</th><th class="num">Faltas</th><th class="num">Am.</th><th class="num">Roj.</th>
+        </tr></thead>
+        <tbody>${avgData.per_match_detail.map(m => `
+          <tr>
+            <td>${escapeHtml(m.date)}</td>
+            <td>${escapeHtml(m.opponent)}</td>
+            <td class="num">${m.shots_total ?? '—'}</td>
+            <td class="num">${m.shots_on_goal ?? '—'}</td>
+            <td class="num">${m.corners ?? '—'}</td>
+            <td class="num">${m.fouls ?? '—'}</td>
+            <td class="num">${m.yellow_cards ?? '—'}</td>
+            <td class="num">${m.red_cards ?? 0}</td>
+          </tr>`).join('')}</tbody>
+      </table>`;
+  } catch (err) {
+    panel.innerHTML = errorBox('No se pudieron cargar las estadísticas avanzadas', err.message);
+  }
+}
+
+async function loadKnockout(code) {
+  const panel = document.getElementById('panel-knockout');
+  panel.innerHTML = loadingBox('cargando bracket...');
+  try {
+    const data = await apiFetch('/api/knockout/' + code);
+    if (!data.stages || !data.stages.length) {
+      panel.innerHTML = `<div class="empty-state"><i class="ti ti-trophy"></i>Todavía no hay partidos de eliminación directa programados o jugados.</div>`;
+      return;
+    }
+    panel.innerHTML = `
+      <div class="section-label">${escapeHtml(data.competition)} — fase de eliminación directa</div>
+      <div class="bracket">${data.stages.map(s => `
+        <div class="bracket-stage">
+          <h4>${escapeHtml(s.stage.replace(/_/g, ' '))}</h4>
+          ${s.matches.map(m => {
+            const homeWin = m.winner === 'HOME_TEAM';
+            const awayWin = m.winner === 'AWAY_TEAM';
+            const homeName = m.homeTeam || 'Por definir';
+            const awayName = m.awayTeam || 'Por definir';
+            const homeScore = m.homeGoals ?? (m.homeTeam ? '-' : '');
+            const awayScore = m.awayGoals ?? (m.awayTeam ? '-' : '');
+            return `<div class="bracket-match">
+              <div class="bm-team ${homeWin ? 'winner' : ''}" ${!m.homeTeam ? 'style="color:var(--chalk-faint)"' : ''}><span>${escapeHtml(homeName)}</span><span>${homeScore}</span></div>
+              <div class="bm-team ${awayWin ? 'winner' : ''}" ${!m.awayTeam ? 'style="color:var(--chalk-faint)"' : ''}><span>${escapeHtml(awayName)}</span><span>${awayScore}</span></div>
+              <div style="margin-top:6px;font-size:10px;color:var(--chalk-faint)">${escapeHtml(m.date.slice(0,10))}</div>
+            </div>`;
+          }).join('')}
+        </div>`).join('')}</div>`;
+  } catch (err) {
+    panel.innerHTML = errorBox('No se pudo cargar el bracket', err.message);
+  }
+}
+
+async function loadHeadToHead(code) {
+  const panel = document.getElementById('panel-h2h');
+  const team1 = teamInput.value.trim();
+  const team2 = team2Input.value.trim();
+  if (!team1 || !team2) {
+    panel.innerHTML = `<div class="empty-state"><i class="ti ti-versus"></i>Escribí dos equipos arriba (ej: Arsenal y Chelsea) y tocá "Cargar". Busca enfrentamientos dentro de la competición/temporada elegida.</div>`;
+    return;
+  }
+  panel.innerHTML = loadingBox(`buscando enfrentamientos ${team1} vs ${team2}...`);
+  try {
+    const data = await apiFetch('/api/head-to-head/' + code + '?team1=' + encodeURIComponent(team1) + '&team2=' + encodeURIComponent(team2) + '&last_n=15');
+    const r = data.record;
+    const total = r.team1_wins + r.draws + r.team2_wins;
+    const pct = (n) => total ? Math.round(n / total * 100) : 0;
+
+    panel.innerHTML = `
+      <div class="section-label">${escapeHtml(data.team1)} vs ${escapeHtml(data.team2)} — últimos ${data.sample_size} enfrentamientos en ${escapeHtml(data.competition_code)}</div>
+
+      <div class="stat-grid">
+        <div class="stat-box"><div class="label">${escapeHtml(data.team1)} ganó</div><div class="value amber">${r.team1_wins}</div></div>
+        <div class="stat-box"><div class="label">Empates</div><div class="value">${r.draws}</div></div>
+        <div class="stat-box"><div class="label">${escapeHtml(data.team2)} ganó</div><div class="value grass">${r.team2_wins}</div></div>
+      </div>
+
+      <div class="section-label">Reparto de resultados</div>
+      <div class="bar-row">
+        <div class="bl">${escapeHtml(data.team1)}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct(r.team1_wins)}%"></div></div>
+        <div class="bv">${pct(r.team1_wins)}%</div>
+      </div>
+      <div class="bar-row">
+        <div class="bl">Empates</div>
+        <div class="bar-track"><div class="bar-fill grass" style="width:${pct(r.draws)}%"></div></div>
+        <div class="bv">${pct(r.draws)}%</div>
+      </div>
+      <div class="bar-row">
+        <div class="bl">${escapeHtml(data.team2)}</div>
+        <div class="bar-track"><div class="bar-fill grass" style="width:${pct(r.team2_wins)}%"></div></div>
+        <div class="bv">${pct(r.team2_wins)}%</div>
+      </div>
+
+      <div class="section-label">Goles promedio por partido</div>
+      <div class="stat-grid">
+        <div class="stat-box"><div class="label">${escapeHtml(data.team1)}</div><div class="value amber">${data.goals.team1_avg}</div></div>
+        <div class="stat-box"><div class="label">${escapeHtml(data.team2)}</div><div class="value grass">${data.goals.team2_avg}</div></div>
+      </div>
+
+      <div class="section-label">Historial</div>
+      <div>${data.matches.map(m => `
+        <div class="match-row">
+          <div class="match-team home">${escapeHtml(m.homeTeam)}</div>
+          <div class="match-date">${escapeHtml(m.date)}</div>
+          <div class="match-score">${m.homeGoals} : ${m.awayGoals}</div>
+          <div class="match-stage"></div>
+          <div class="match-team away">${escapeHtml(m.awayTeam)}</div>
+        </div>`).join('')}</div>`;
+  } catch (err) {
+    panel.innerHTML = errorBox('No se pudo cargar el cara a cara', err.message);
+  }
+}
+
+async function loadQualifiers() {
+  const panel = document.getElementById('panel-qualifiers');
+  const confed = confedSelect.value;
+  panel.innerHTML = loadingBox('cargando eliminatoria mundialista...');
+  try {
+    const data = await apiFetch('/api/qualifiers/standings/' + confed);
+    panel.innerHTML = `
+      <div class="section-label">${escapeHtml(data.confederation)} — temporada ${escapeHtml(String(data.season))}</div>
+      <div class="group-grid">${data.groups.map(g => `
+        <div class="group-card">
+          <h3>${escapeHtml(g.group || 'Tabla general')}</h3>
+          ${renderStandingsTable(g.table, true)}
+        </div>`).join('')}</div>`;
+  } catch (err) {
+    // Algunas confederaciones (ej. Oceanía) no tienen standings en formato
+    // de grupos — caemos a mostrar los partidos en su lugar.
+    try {
+      const matchData = await apiFetch('/api/qualifiers/matches/' + confed + '?limit=20');
+      panel.innerHTML = `
+        <div class="section-label">${escapeHtml(matchData.confederation)} — últimos ${matchData.count} partidos (temporada ${escapeHtml(String(matchData.season))})</div>
+        <div>${matchData.matches.map(m => `
+          <div class="match-row">
+            <div class="match-team home">${escapeHtml(m.homeTeam)}</div>
+            <div class="match-date">${escapeHtml(m.date.slice(0,10))}</div>
+            <div class="match-score">${m.homeGoals ?? '-'} : ${m.awayGoals ?? '-'}</div>
+            <div class="match-stage">${escapeHtml(m.round || '')}</div>
+            <div class="match-team away">${escapeHtml(m.awayTeam)}</div>
+          </div>`).join('')}</div>`;
+    } catch (err2) {
+      panel.innerHTML = errorBox('No se pudo cargar la eliminatoria', err2.message);
+    }
+  }
+}
+
+async function loadFriendlies() {
+  const panel = document.getElementById('panel-friendlies');
+  const team = teamInput.value.trim();
+  panel.innerHTML = loadingBox('cargando amistosos internacionales...');
+  try {
+    const path = '/api/friendlies?limit=20' + (team ? '&team=' + encodeURIComponent(team) : '');
+    const data = await apiFetch(path);
+    if (!data.matches.length) {
+      panel.innerHTML = `<div class="empty-state"><i class="ti ti-ball-football-off"></i>No se encontraron amistosos recientes${team ? ' para ' + escapeHtml(team) : ''}. Solo selección absoluta masculina — se excluyen juveniles y femenino.</div>`;
+      return;
+    }
+    panel.innerHTML = `
+      <div class="section-label">Amistosos internacionales — selección absoluta masculina${team ? ' · ' + escapeHtml(team) : ''}</div>
+      <div>${data.matches.map(m => `
+        <div class="match-row">
+          <div class="match-team home">${escapeHtml(m.homeTeam)}</div>
+          <div class="match-date">${escapeHtml(m.date.slice(0,10))}</div>
+          <div class="match-score">${m.homeGoals ?? '-'} : ${m.awayGoals ?? '-'}</div>
+          <div class="match-stage">${escapeHtml(m.status || '')}</div>
+          <div class="match-team away">${escapeHtml(m.awayTeam)}</div>
+        </div>`).join('')}</div>`;
+  } catch (err) {
+    panel.innerHTML = errorBox('No se pudieron cargar los amistosos', err.message);
+  }
+}
+
+init();
+</script>
+</body>
+</html>
+

@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
+<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_1.html -->
+<html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pizarra — Análisis de fútbol</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com/">
+<link href="./index_1_files/css2" rel="stylesheet">
 <style>
 :root{
   --field-night:#0B1A12;
@@ -223,16 +223,16 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--field-line);f
       <div class="sub">Análisis estadístico de fútbol — uso personal, no es asesoramiento financiero</div>
     </div>
     <div class="conn-status">
-      <span class="conn-dot" id="connDot"></span>
-      <span id="connText">conectando con backend...</span>
+      <span class="conn-dot bad" id="connDot"></span>
+      <span id="connText">backend no configurado</span>
     </div>
   </div>
 
   <div class="controls">
     <select class="field-select" id="competitionSelect"></select>
-    <input class="field-input" id="teamInput" placeholder="Nombre del equipo (ej: Arsenal)" />
-    <input class="field-input" id="team2Input" placeholder="Rival (solo para Cara a cara, ej: Chelsea)" style="display:none;" />
-    <select class="field-select" id="confedSelect" style="display:none;"></select>
+    <input class="field-input" id="teamInput" placeholder="Nombre del equipo (ej: Arsenal)">
+    <input class="field-input" id="team2Input" placeholder="Rival (solo para Cara a cara, ej: Chelsea)" style="display:none;">
+    <select class="field-select" id="confedSelect" style="display:none;"><option value="south_america">CONMEBOL (Sudamérica)</option><option value="europe">UEFA (Europa)</option><option value="africa">CAF (África)</option><option value="asia">AFC (Asia)</option><option value="concacaf">CONCACAF (Norte/Centroamérica y Caribe)</option><option value="oceania">OFC (Oceanía)</option></select>
     <button class="btn" id="loadBtn">Cargar</button>
     <button class="btn ghost" id="backendUrlBtn" title="Cambiar URL del backend">backend</button>
   </div>
@@ -248,7 +248,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--field-line);f
     <button class="tab" data-tab="friendlies">Amistosos</button>
   </div>
 
-  <div class="panel active" id="panel-standings"></div>
+  <div class="panel active" id="panel-standings"><div class="error-box"><div class="err-title">Todavía no configuraste la URL de tu backend</div>Tocá el botón "backend" arriba a la derecha y pegá la URL que te dio Render (algo como https://tu-app.onrender.com). Se va a guardar en este navegador para la próxima vez.</div></div>
   <div class="panel" id="panel-matches"></div>
   <div class="panel" id="panel-trends"></div>
   <div class="panel" id="panel-h2h"></div>
@@ -603,7 +603,7 @@ async function loadAdvanced(code) {
   const panel = document.getElementById('panel-advanced');
   const team = teamInput.value.trim();
   if (!team) {
-    panel.innerHTML = `<div class="empty-state"><i class="ti ti-search"></i>Escribí el nombre de un equipo arriba (ej: Arsenal) y tocá "Cargar". Esta pestaña usa api-sports.io: hay que tener APISPORTS_KEY configurada en el backend.</div>`;
+    panel.innerHTML = `<div class="empty-state"><i class="ti ti-search"></i>Escribí el nombre de un equipo arriba (ej: Arsenal o Ecuador) y tocá "Cargar". Esta pestaña usa api-sports.io: hay que tener APISPORTS_KEY configurada en el backend.</div>`;
     return;
   }
   panel.innerHTML = loadingBox('buscando equipo en api-sports.io...');
@@ -615,32 +615,94 @@ async function loadAdvanced(code) {
     }
 
     const teamSearch = await apiFetch('/api/apisports/search-team?name=' + encodeURIComponent(team));
-    const exactMatches = teamSearch.results.filter(t => !t.national && t.name.toLowerCase() === team.toLowerCase());
-    const teamMatch = exactMatches[0] || teamSearch.results.filter(t => !t.national)[0];
+    // Para selecciones (ej: Ecuador) el equipo correcto tiene national=true;
+    // para clubes (ej: Arsenal) tiene national=false. Probamos exacto en
+    // ambos universos antes de conformarnos con el primer resultado.
+    const isNationalTeamTab = ['WC', 'EC', 'CL', 'CLI'].includes(code);
+    const pool = isNationalTeamTab
+      ? teamSearch.results.filter(t => t.national)
+      : teamSearch.results.filter(t => !t.national);
+    const exactMatches = pool.filter(t => t.name.toLowerCase() === team.toLowerCase());
+    const teamMatch = exactMatches[0] || pool[0] || teamSearch.results[0];
     if (!teamMatch) {
       panel.innerHTML = errorBox('Equipo no encontrado en api-sports.io', `No hay coincidencias para "${team}".`);
       return;
     }
 
-    const leagueNameGuess = currentCompetitions.leagues_de_clubes && currentCompetitions.leagues_de_clubes[code];
+    // IDs de liga en api-sports.io. Para clubes, un solo candidato (la liga
+    // elegida arriba). Para selecciones nacionales, probamos varios
+    // candidatos en orden (Mundial, Eurocopa, y las eliminatorias por
+    // confederación) porque la mayoría de los partidos recientes de una
+    // selección no son del torneo final sino de su eliminatoria — y no le
+    // pedimos al usuario que sepa esa diferencia de antemano.
+    const APISPORTS_LEAGUE_ID_BY_CODE = { WC: 1, EC: 4, CL: 2, CLI: 13 };
+    const NATIONAL_TEAM_LEAGUE_CANDIDATES = [
+      1,   // FIFA World Cup
+      32,  // Eliminatoria UEFA (Europa)
+      34,  // Eliminatoria CONMEBOL (Sudamérica)
+      29,  // Eliminatoria CAF (África)
+      30,  // Eliminatoria AFC (Asia)
+      31,  // Eliminatoria CONCACAF
+      33,  // Eliminatoria OFC (Oceanía)
+      4,   // Euro Championship
+    ];
+
     let leagueId = null;
-    if (leagueNameGuess) {
-      const leagueSearch = await apiFetch('/api/apisports/search-league?name=' + encodeURIComponent(leagueNameGuess.split(' (')[0]));
-      const leagueMatch = leagueSearch.results[0];
-      leagueId = leagueMatch ? leagueMatch.id : null;
+    let avgData = null;
+
+    if (isNationalTeamTab) {
+      // Probamos TODOS los candidatos (no nos quedamos con el primero que
+      // responda) y elegimos el que tenga más partidos analizados — el
+      // objetivo es "los últimos N partidos reales", y una selección
+      // recién arrancando el Mundial puede tener muy pocos partidos ahí
+      // mientras tiene 10+ en su eliminatoria continental.
+      const ordered = [APISPORTS_LEAGUE_ID_BY_CODE[code], ...NATIONAL_TEAM_LEAGUE_CANDIDATES]
+        .filter((v, i, arr) => v && arr.indexOf(v) === i);
+      let bestData = null;
+      let bestLeagueId = null;
+      for (const candidateId of ordered) {
+        try {
+          const candidateData = await apiFetch('/api/team-match-stats-avg/' + candidateId + '/' + teamMatch.id + '?last_n=10');
+          if (!bestData || candidateData.matches_analyzed > bestData.matches_analyzed) {
+            bestData = candidateData;
+            bestLeagueId = candidateId;
+          }
+          if (bestData.matches_analyzed >= 10) break; // ya llegamos al máximo pedido, no hace falta seguir
+        } catch (e) {
+          continue; // sin partidos en esta competición para este equipo, probamos el siguiente candidato
+        }
+      }
+      leagueId = bestLeagueId;
+      avgData = bestData;
+      if (!avgData) {
+        panel.innerHTML = errorBox(
+          'No se encontraron partidos con estadísticas para esta selección',
+          `Probamos Mundial, Eurocopa y las 6 eliminatorias continentales para "${teamMatch.name}" y ninguna tenía datos de remates/tarjetas disponibles todavía.`
+        );
+        return;
+      }
+    } else {
+      leagueId = APISPORTS_LEAGUE_ID_BY_CODE[code] || null;
+      if (!leagueId) {
+        const leagueNameGuess = currentCompetitions.leagues_de_clubes && currentCompetitions.leagues_de_clubes[code];
+        if (leagueNameGuess) {
+          const leagueSearch = await apiFetch('/api/apisports/search-league?name=' + encodeURIComponent(leagueNameGuess.split(' (')[0]));
+          const leagueMatch = leagueSearch.results[0];
+          leagueId = leagueMatch ? leagueMatch.id : null;
+        }
+      }
+      if (!leagueId) {
+        panel.innerHTML = errorBox('No se pudo resolver el ID de liga en api-sports.io', 'Esta competición todavía no tiene mapeo automático a api-sports.io en este prototipo.');
+        return;
+      }
+      panel.innerHTML = loadingBox('calculando promedios de remates / corners / tarjetas (puede tardar unos segundos)...');
+      avgData = await apiFetch('/api/team-match-stats-avg/' + leagueId + '/' + teamMatch.id + '?last_n=10');
     }
 
-    if (!leagueId) {
-      panel.innerHTML = errorBox('No se pudo resolver el ID de liga en api-sports.io', 'Esta competición todavía no tiene mapeo automático a api-sports.io en este prototipo. Probá con una liga de clubes (PL, PD, SA, BL1, FL1).');
-      return;
-    }
-
-    panel.innerHTML = loadingBox('calculando promedios de remates / corners / tarjetas (puede tardar unos segundos)...');
-    const avgData = await apiFetch('/api/team-match-stats-avg/' + leagueId + '/' + teamMatch.id + '?last_n=10');
     const a = avgData.averages_per_match;
 
     panel.innerHTML = `
-      <div class="section-label">${escapeHtml(teamMatch.name)} — promedio sobre ${avgData.matches_analyzed} partidos recientes</div>
+      <div class="section-label">${escapeHtml(teamMatch.name)} — promedio sobre ${avgData.matches_analyzed} partidos recientes (liga api-sports.io #${leagueId})</div>
 
       <div class="stat-grid">
         <div class="stat-box"><div class="label">Remates totales</div><div class="value amber">${a.shots_total ?? '—'}</div></div>
@@ -830,6 +892,6 @@ async function loadFriendlies() {
 
 init();
 </script>
-</body>
-</html>
 
+
+</body></html>

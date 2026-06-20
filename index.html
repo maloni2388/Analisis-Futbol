@@ -1,27 +1,27 @@
 <!DOCTYPE html>
-<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_1.html -->
+<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_2.html -->
 <html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pizarra — Análisis de fútbol</title>
 <link rel="preconnect" href="https://fonts.googleapis.com/">
-<link href="./index_1_files/css2" rel="stylesheet">
+<link href="./index_2_files/css2" rel="stylesheet">
 <style>
 :root{
-  --field-night:#0B1A12;
-  --field-panel:#142B1E;
-  --field-panel-raised:#1A3326;
-  --field-line:#2B4A37;
-  --chalk:#F4F1E6;
-  --chalk-dim:#A9B8AC;
-  --chalk-faint:#6C7C70;
-  --amber:#E8A23D;
-  --amber-dim:#7A5A28;
-  --grass:#5BAE7C;
-  --grass-dim:#2E5A40;
-  --card-red:#D8553A;
-  --card-red-dim:#5A2E22;
-  --card-yellow:#E8C23D;
+  --field-night:#FAFAF7;
+  --field-panel:#F0F2ED;
+  --field-panel-raised:#E6E9E0;
+  --field-line:#D8DCD3;
+  --chalk:#1A2B20;
+  --chalk-dim:#5C685F;
+  --chalk-faint:#8B958A;
+  --amber:#C77D1E;
+  --amber-dim:#F3DDB8;
+  --grass:#2F7A4F;
+  --grass-dim:#DCEBE1;
+  --card-red:#B8432B;
+  --card-red-dim:#F3DAD2;
+  --card-yellow:#A8771E;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 body{
@@ -30,7 +30,7 @@ body{
   font-family:'Inter',system-ui,sans-serif;
   min-height:100vh;
   background-image:
-    repeating-linear-gradient(0deg, transparent, transparent 119px, rgba(244,241,230,0.025) 119px, rgba(244,241,230,0.025) 120px);
+    repeating-linear-gradient(0deg, transparent, transparent 119px, rgba(26,43,32,0.035) 119px, rgba(26,43,32,0.035) 120px);
 }
 .wrap{max-width:1180px;margin:0 auto;padding:28px 24px 80px;}
 
@@ -52,8 +52,8 @@ body{
   padding:6px 12px;border:1px solid var(--field-line);border-radius:3px;
 }
 .conn-dot{width:8px;height:8px;border-radius:50%;background:var(--chalk-faint);flex-shrink:0;}
-.conn-dot.ok{background:var(--grass);box-shadow:0 0 6px var(--grass);}
-.conn-dot.bad{background:var(--card-red);box-shadow:0 0 6px var(--card-red);}
+.conn-dot.ok{background:var(--grass);box-shadow:0 0 0 3px var(--grass-dim);}
+.conn-dot.bad{background:var(--card-red);box-shadow:0 0 0 3px var(--card-red-dim);}
 
 .controls{
   display:flex;gap:10px;flex-wrap:wrap;margin-bottom:28px;align-items:center;
@@ -77,7 +77,7 @@ body{
   letter-spacing:0.6px;text-transform:uppercase;
   padding:10px 18px;border-radius:3px;cursor:pointer;
 }
-.btn:hover{background:#f0b157;}
+.btn:hover{background:#A8691A;}
 .btn:active{transform:scale(0.98);}
 .btn.ghost{
   background:transparent;color:var(--chalk-dim);border:1px solid var(--field-line);
@@ -111,7 +111,7 @@ thead th{
   border-bottom:1px solid var(--field-line);
 }
 thead th.num{text-align:center;}
-tbody td{padding:9px 10px;border-bottom:1px solid rgba(43,74,55,0.5);}
+tbody td{padding:9px 10px;border-bottom:1px solid rgba(216,220,211,0.8);}
 tbody td.num{text-align:center;}
 tbody tr:hover{background:rgba(91,174,124,0.06);}
 .pos-cell{display:flex;align-items:center;gap:8px;}
@@ -136,7 +136,7 @@ tbody tr:hover{background:rgba(91,174,124,0.06);}
 
 .match-row{
   display:grid;grid-template-columns:1fr auto auto auto 1fr;align-items:center;gap:14px;
-  padding:12px 14px;border-bottom:1px solid rgba(43,74,55,0.5);font-size:14px;
+  padding:12px 14px;border-bottom:1px solid rgba(216,220,211,0.8);font-size:14px;
 }
 .match-row:hover{background:rgba(91,174,124,0.06);}
 .match-team{display:flex;align-items:center;gap:8px;}
@@ -174,7 +174,7 @@ tbody tr:hover{background:rgba(91,174,124,0.06);}
 .recent-list{font-family:'JetBrains Mono',monospace;font-size:12px;}
 .recent-item{
   display:grid;grid-template-columns:80px 1fr 60px;gap:10px;padding:7px 10px;
-  border-bottom:1px solid rgba(43,74,55,0.4);align-items:center;
+  border-bottom:1px solid rgba(216,220,211,0.7);align-items:center;
 }
 .recent-item .res{padding:1px 6px;border-radius:2px;font-size:10px;font-weight:600;text-align:center;}
 .recent-item .res.W{background:var(--grass-dim);color:var(--grass);}
@@ -198,7 +198,7 @@ tbody tr:hover{background:rgba(91,174,124,0.06);}
   font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:0.5px;
 }
 .error-box{
-  background:var(--card-red-dim);border:1px solid var(--card-red);color:#F4D6CE;
+  background:var(--card-red-dim);border:1px solid var(--card-red);color:#6B2818;
   padding:14px 16px;border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:12px;
   line-height:1.6;margin-bottom:16px;
 }
@@ -629,55 +629,54 @@ async function loadAdvanced(code) {
       return;
     }
 
-    // IDs de liga en api-sports.io. Para clubes, un solo candidato (la liga
-    // elegida arriba). Para selecciones nacionales, probamos varios
-    // candidatos en orden (Mundial, Eurocopa, y las eliminatorias por
-    // confederación) porque la mayoría de los partidos recientes de una
-    // selección no son del torneo final sino de su eliminatoria — y no le
-    // pedimos al usuario que sepa esa diferencia de antemano.
+    // IDs de liga en api-sports.io para selecciones/copas. Para clubes,
+    // un solo candidato (la liga elegida arriba). Para selecciones
+    // nacionales, consultamos TODAS estas competiciones a la vez (Mundial,
+    // Eurocopa, eliminatorias por confederación, y amistosos) y nos
+    // quedamos con los N partidos más recientes en el tiempo real, sin
+    // importar de cuál de ellas vienen — porque el partido más nuevo de
+    // una selección puede ser un amistoso o un partido del torneo final,
+    // mientras el grueso de su historial está en la eliminatoria.
     const APISPORTS_LEAGUE_ID_BY_CODE = { WC: 1, EC: 4, CL: 2, CLI: 13 };
+    const LEAGUE_NAME_BY_ID = {
+      1: 'Mundial',
+      4: 'Eurocopa',
+      2: 'Champions League',
+      13: 'Libertadores',
+      32: 'Elim. Europa',
+      34: 'Elim. Sudamérica',
+      29: 'Elim. África',
+      30: 'Elim. Asia',
+      31: 'Elim. CONCACAF',
+      33: 'Elim. Oceanía',
+      10: 'Amistoso',
+    };
     const NATIONAL_TEAM_LEAGUE_CANDIDATES = [
       1,   // FIFA World Cup
+      4,   // Euro Championship
       32,  // Eliminatoria UEFA (Europa)
       34,  // Eliminatoria CONMEBOL (Sudamérica)
       29,  // Eliminatoria CAF (África)
       30,  // Eliminatoria AFC (Asia)
       31,  // Eliminatoria CONCACAF
       33,  // Eliminatoria OFC (Oceanía)
-      4,   // Euro Championship
+      10,  // Amistosos internacionales
     ];
 
     let leagueId = null;
     let avgData = null;
 
     if (isNationalTeamTab) {
-      // Probamos TODOS los candidatos (no nos quedamos con el primero que
-      // responda) y elegimos el que tenga más partidos analizados — el
-      // objetivo es "los últimos N partidos reales", y una selección
-      // recién arrancando el Mundial puede tener muy pocos partidos ahí
-      // mientras tiene 10+ en su eliminatoria continental.
-      const ordered = [APISPORTS_LEAGUE_ID_BY_CODE[code], ...NATIONAL_TEAM_LEAGUE_CANDIDATES]
-        .filter((v, i, arr) => v && arr.indexOf(v) === i);
-      let bestData = null;
-      let bestLeagueId = null;
-      for (const candidateId of ordered) {
-        try {
-          const candidateData = await apiFetch('/api/team-match-stats-avg/' + candidateId + '/' + teamMatch.id + '?last_n=10');
-          if (!bestData || candidateData.matches_analyzed > bestData.matches_analyzed) {
-            bestData = candidateData;
-            bestLeagueId = candidateId;
-          }
-          if (bestData.matches_analyzed >= 10) break; // ya llegamos al máximo pedido, no hace falta seguir
-        } catch (e) {
-          continue; // sin partidos en esta competición para este equipo, probamos el siguiente candidato
-        }
-      }
-      leagueId = bestLeagueId;
-      avgData = bestData;
-      if (!avgData) {
+      panel.innerHTML = loadingBox('buscando los partidos más recientes en Mundial, eliminatorias y amistosos...');
+      avgData = await apiFetch(
+        '/api/team-match-stats-multi/' + teamMatch.id +
+        '?league_ids=' + NATIONAL_TEAM_LEAGUE_CANDIDATES.join(',') +
+        '&last_n=10'
+      );
+      if (!avgData || !avgData.matches_analyzed) {
         panel.innerHTML = errorBox(
           'No se encontraron partidos con estadísticas para esta selección',
-          `Probamos Mundial, Eurocopa y las 6 eliminatorias continentales para "${teamMatch.name}" y ninguna tenía datos de remates/tarjetas disponibles todavía.`
+          `Probamos Mundial, Eurocopa, las 6 eliminatorias continentales y amistosos para "${teamMatch.name}" y no había datos de remates/tarjetas disponibles todavía.`
         );
         return;
       }
@@ -702,7 +701,11 @@ async function loadAdvanced(code) {
     const a = avgData.averages_per_match;
 
     panel.innerHTML = `
-      <div class="section-label">${escapeHtml(teamMatch.name)} — promedio sobre ${avgData.matches_analyzed} partidos recientes (liga api-sports.io #${leagueId})</div>
+      <div class="section-label">${escapeHtml(teamMatch.name)} — promedio sobre ${avgData.matches_analyzed} partidos recientes${
+        isNationalTeamTab
+          ? (avgData.leagues_used && avgData.leagues_used.length > 1 ? ' (varias competiciones)' : '')
+          : ` (liga api-sports.io #${leagueId})`
+      }</div>
 
       <div class="stat-grid">
         <div class="stat-box"><div class="label">Remates totales</div><div class="value amber">${a.shots_total ?? '—'}</div></div>
@@ -716,13 +719,14 @@ async function loadAdvanced(code) {
       <div class="section-label">Detalle por partido</div>
       <table>
         <thead><tr>
-          <th>Fecha</th><th>Rival</th><th class="num">Remates</th><th class="num">Al arco</th>
+          <th>Fecha</th><th>Rival</th>${isNationalTeamTab ? '<th>Competición</th>' : ''}<th class="num">Remates</th><th class="num">Al arco</th>
           <th class="num">Corners</th><th class="num">Faltas</th><th class="num">Am.</th><th class="num">Roj.</th>
         </tr></thead>
         <tbody>${avgData.per_match_detail.map(m => `
           <tr>
             <td>${escapeHtml(m.date)}</td>
             <td>${escapeHtml(m.opponent)}</td>
+            ${isNationalTeamTab ? `<td>${escapeHtml(LEAGUE_NAME_BY_ID[m.league_id] || ('#' + m.league_id))}</td>` : ''}
             <td class="num">${m.shots_total ?? '—'}</td>
             <td class="num">${m.shots_on_goal ?? '—'}</td>
             <td class="num">${m.corners ?? '—'}</td>

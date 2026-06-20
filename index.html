@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_2.html -->
+<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_3.html -->
 <html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pizarra — Análisis de fútbol</title>
 <link rel="preconnect" href="https://fonts.googleapis.com/">
-<link href="./index_2_files/css2" rel="stylesheet">
+<link href="./index_3_files/css2" rel="stylesheet">
 <style>
 :root{
   --field-night:#FAFAF7;
@@ -295,6 +295,87 @@ Object.entries(CONFEDERATIONS_STATIC).forEach(([key, label]) => {
   confedSelect.appendChild(opt);
 });
 
+// football-data.org y api-sports.io guardan los nombres de las selecciones
+// en inglés. El usuario escribe en español, así que traducimos antes de
+// mandar la búsqueda — sin esto, países con nombre muy distinto entre
+// idiomas (Curazao/Curaçao, Costa de Marfil/Ivory Coast, Países
+// Bajos/Netherlands) no aparecen nunca, aunque el dato exista.
+// Cubre las selecciones de las eliminatorias mundialistas vigentes; no es
+// una lista exhaustiva de los ~210 miembros de FIFA, así que un país que
+// falte acá simplemente se busca tal cual lo escribió el usuario (mismo
+// comportamiento que antes de este diccionario).
+const SPANISH_TO_TEAM_SEARCH_NAME = {
+  'alemania': 'Germany',
+  'argelia': 'Algeria',
+  'austria': 'Austria',
+  'bélgica': 'Belgium',
+  'belgica': 'Belgium',
+  'bosnia': 'Bosnia',
+  'bosnia y herzegovina': 'Bosnia',
+  'cabo verde': 'Cape Verde',
+  'canadá': 'Canada',
+  'canada': 'Canada',
+  'catar': 'Qatar',
+  'corea del sur': 'South Korea',
+  'costa de marfil': 'Ivory Coast',
+  'croacia': 'Croatia',
+  'curazao': 'Curacao',
+  'curaçao': 'Curacao',
+  'egipto': 'Egypt',
+  'escocia': 'Scotland',
+  'eslovaquia': 'Slovakia',
+  'eslovenia': 'Slovenia',
+  'españa': 'Spain',
+  'espana': 'Spain',
+  'estados unidos': 'USA',
+  'finlandia': 'Finland',
+  'francia': 'France',
+  'gales': 'Wales',
+  'ghana': 'Ghana',
+  'grecia': 'Greece',
+  'haití': 'Haiti',
+  'haiti': 'Haiti',
+  'hungría': 'Hungary',
+  'hungria': 'Hungary',
+  'inglaterra': 'England',
+  'irak': 'Iraq',
+  'irán': 'Iran',
+  'iran': 'Iran',
+  'jamaica': 'Jamaica',
+  'japón': 'Japan',
+  'japon': 'Japan',
+  'jordania': 'Jordan',
+  'marruecos': 'Morocco',
+  'noruega': 'Norway',
+  'nueva zelanda': 'New Zealand',
+  'países bajos': 'Netherlands',
+  'paises bajos': 'Netherlands',
+  'holanda': 'Netherlands',
+  'polonia': 'Poland',
+  'portugal': 'Portugal',
+  'reino unido': 'England',
+  'república checa': 'Czechia',
+  'republica checa': 'Czechia',
+  'rumania': 'Romania',
+  'rumanía': 'Romania',
+  'sudáfrica': 'South Africa',
+  'sudafrica': 'South Africa',
+  'suecia': 'Sweden',
+  'suiza': 'Switzerland',
+  'túnez': 'Tunisia',
+  'tunez': 'Tunisia',
+  'turquía': 'Turkey',
+  'turquia': 'Turkey',
+  'ucrania': 'Ukraine',
+  'uzbekistán': 'Uzbekistan',
+  'uzbekistan': 'Uzbekistan',
+};
+
+function translateTeamSearch(name) {
+  const translated = SPANISH_TO_TEAM_SEARCH_NAME[name.trim().toLowerCase()];
+  return translated || name;
+}
+
 const TABS_NEEDING = {
   standings: { competition: true, team: false, team2: false, confed: false },
   matches: { competition: true, team: false, team2: false, confed: false },
@@ -521,7 +602,7 @@ async function loadTrends(code) {
   }
   panel.innerHTML = loadingBox('calculando tendencias de ' + team + '...');
   try {
-    const data = await apiFetch('/api/team-trends/' + code + '?team=' + encodeURIComponent(team) + '&last_n=20');
+    const data = await apiFetch('/api/team-trends/' + code + '?team=' + encodeURIComponent(translateTeamSearch(team)) + '&last_n=20');
     const isOver = data.tendency_over_2_5_team_goals.startsWith('Sí');
     panel.innerHTML = `
       <div class="section-label">${escapeHtml(data.team_matched)} — últimos ${data.sample_size} partidos en ${escapeHtml(code)}</div>
@@ -614,7 +695,7 @@ async function loadAdvanced(code) {
       return;
     }
 
-    const teamSearch = await apiFetch('/api/apisports/search-team?name=' + encodeURIComponent(team));
+    const teamSearch = await apiFetch('/api/apisports/search-team?name=' + encodeURIComponent(translateTeamSearch(team)));
     // Para selecciones (ej: Ecuador) el equipo correcto tiene national=true;
     // para clubes (ej: Arsenal) tiene national=false. Probamos exacto en
     // ambos universos antes de conformarnos con el primer resultado.
@@ -783,7 +864,7 @@ async function loadHeadToHead(code) {
   }
   panel.innerHTML = loadingBox(`buscando enfrentamientos ${team1} vs ${team2}...`);
   try {
-    const data = await apiFetch('/api/head-to-head/' + code + '?team1=' + encodeURIComponent(team1) + '&team2=' + encodeURIComponent(team2) + '&last_n=15');
+    const data = await apiFetch('/api/head-to-head/' + code + '?team1=' + encodeURIComponent(translateTeamSearch(team1)) + '&team2=' + encodeURIComponent(translateTeamSearch(team2)) + '&last_n=15');
     const r = data.record;
     const total = r.team1_wins + r.draws + r.team2_wins;
     const pct = (n) => total ? Math.round(n / total * 100) : 0;
@@ -873,7 +954,7 @@ async function loadFriendlies() {
   const team = teamInput.value.trim();
   panel.innerHTML = loadingBox('cargando amistosos internacionales...');
   try {
-    const path = '/api/friendlies?limit=20' + (team ? '&team=' + encodeURIComponent(team) : '');
+    const path = '/api/friendlies?limit=20' + (team ? '&team=' + encodeURIComponent(translateTeamSearch(team)) : '');
     const data = await apiFetch(path);
     if (!data.matches.length) {
       panel.innerHTML = `<div class="empty-state"><i class="ti ti-ball-football-off"></i>No se encontraron amistosos recientes${team ? ' para ' + escapeHtml(team) : ''}. Solo selección absoluta masculina — se excluyen juveniles y femenino.</div>`;

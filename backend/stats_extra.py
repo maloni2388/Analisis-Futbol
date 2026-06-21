@@ -783,6 +783,8 @@ def team_match_stats_avg(league_id, team_id):
             row = {
                 "shots_total": num("Total Shots"),
                 "shots_on_goal": num("Shots on Goal"),
+                "shots_off_goal": num("Shots off Goal"),
+                "shots_blocked": num("Blocked Shots"),
                 "shots_inside_box": num("Shots insidebox"),
                 "shots_outside_box": num("Shots outsidebox"),
                 "corners": num("Corner Kicks"),
@@ -805,6 +807,10 @@ def team_match_stats_avg(league_id, team_id):
                 "opponent": (
                     fx["teams"]["away"]["name"] if fx["teams"]["home"]["id"] == team_id
                     else fx["teams"]["home"]["name"]
+                ),
+                "goals_for": (
+                    fx["goals"]["home"] if fx["teams"]["home"]["id"] == team_id
+                    else fx["goals"]["away"]
                 ),
                 **row,
             })
@@ -839,7 +845,8 @@ def team_match_stats_avg(league_id, team_id):
         }), 404
 
     AVG_KEYS = [
-        "shots_total", "shots_on_goal", "shots_inside_box", "shots_outside_box",
+        "shots_total", "shots_on_goal", "shots_off_goal", "shots_blocked",
+        "shots_inside_box", "shots_outside_box",
         "corners", "fouls", "offsides", "yellow_cards", "red_cards",
         "possession_pct", "goalkeeper_saves", "expected_goals", "goals_prevented",
     ]
@@ -967,6 +974,8 @@ def team_match_stats_multi(team_id):
             row = {
                 "shots_total": num("Total Shots"),
                 "shots_on_goal": num("Shots on Goal"),
+                "shots_off_goal": num("Shots off Goal"),
+                "shots_blocked": num("Blocked Shots"),
                 "shots_inside_box": num("Shots insidebox"),
                 "shots_outside_box": num("Shots outsidebox"),
                 "corners": num("Corner Kicks"),
@@ -990,6 +999,10 @@ def team_match_stats_multi(team_id):
                 "opponent": (
                     fx["teams"]["away"]["name"] if fx["teams"]["home"]["id"] == team_id
                     else fx["teams"]["home"]["name"]
+                ),
+                "goals_for": (
+                    fx["goals"]["home"] if fx["teams"]["home"]["id"] == team_id
+                    else fx["goals"]["away"]
                 ),
                 "league_id": lg_id,
                 **row,
@@ -1022,7 +1035,8 @@ def team_match_stats_multi(team_id):
         }), 404
 
     AVG_KEYS = [
-        "shots_total", "shots_on_goal", "shots_inside_box", "shots_outside_box",
+        "shots_total", "shots_on_goal", "shots_off_goal", "shots_blocked",
+        "shots_inside_box", "shots_outside_box",
         "corners", "fouls", "offsides", "yellow_cards", "red_cards",
         "possession_pct", "goalkeeper_saves", "expected_goals", "goals_prevented",
     ]

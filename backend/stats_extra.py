@@ -684,13 +684,31 @@ def team_match_stats_avg(league_id, team_id):
                 except (TypeError, ValueError):
                     return None
 
+            def pct(key):
+                # "Ball Possession" y "Passes %" vienen como string "60%",
+                # no como número — hay que sacar el símbolo antes de parsear.
+                v = stats.get(key)
+                if v is None:
+                    return None
+                try:
+                    return float(str(v).replace("%", ""))
+                except (TypeError, ValueError):
+                    return None
+
             row = {
                 "shots_total": num("Total Shots"),
                 "shots_on_goal": num("Shots on Goal"),
+                "shots_inside_box": num("Shots insidebox"),
+                "shots_outside_box": num("Shots outsidebox"),
                 "corners": num("Corner Kicks"),
                 "fouls": num("Fouls"),
+                "offsides": num("Offsides"),
                 "yellow_cards": num("Yellow Cards"),
                 "red_cards": num("Red Cards"),
+                "possession_pct": pct("Ball Possession"),
+                "goalkeeper_saves": num("Goalkeeper Saves"),
+                "expected_goals": num("expected_goals"),
+                "goals_prevented": num("goals_prevented"),
             }
             for key, val in row.items():
                 if val is not None:
@@ -711,9 +729,14 @@ def team_match_stats_avg(league_id, team_id):
             "error": "No se pudieron obtener estadísticas detalladas para ningún partido (puede que esta liga/temporada no tenga datos de fixtures/statistics disponibles)."
         }), 404
 
+    AVG_KEYS = [
+        "shots_total", "shots_on_goal", "shots_inside_box", "shots_outside_box",
+        "corners", "fouls", "offsides", "yellow_cards", "red_cards",
+        "possession_pct", "goalkeeper_saves", "expected_goals", "goals_prevented",
+    ]
     averages = {
         key: round(totals[key] / counts[key], 2) if counts[key] else None
-        for key in ["shots_total", "shots_on_goal", "corners", "fouls", "yellow_cards", "red_cards"]
+        for key in AVG_KEYS
     }
 
     result = {
@@ -808,13 +831,29 @@ def team_match_stats_multi(team_id):
                 except (TypeError, ValueError):
                     return None
 
+            def pct(key):
+                v = stats.get(key)
+                if v is None:
+                    return None
+                try:
+                    return float(str(v).replace("%", ""))
+                except (TypeError, ValueError):
+                    return None
+
             row = {
                 "shots_total": num("Total Shots"),
                 "shots_on_goal": num("Shots on Goal"),
+                "shots_inside_box": num("Shots insidebox"),
+                "shots_outside_box": num("Shots outsidebox"),
                 "corners": num("Corner Kicks"),
                 "fouls": num("Fouls"),
+                "offsides": num("Offsides"),
                 "yellow_cards": num("Yellow Cards"),
                 "red_cards": num("Red Cards"),
+                "possession_pct": pct("Ball Possession"),
+                "goalkeeper_saves": num("Goalkeeper Saves"),
+                "expected_goals": num("expected_goals"),
+                "goals_prevented": num("goals_prevented"),
             }
             for key, val in row.items():
                 if val is not None:
@@ -837,9 +876,14 @@ def team_match_stats_multi(team_id):
             "error": "No se pudieron obtener estadísticas detalladas para ninguno de los partidos más recientes encontrados."
         }), 404
 
+    AVG_KEYS = [
+        "shots_total", "shots_on_goal", "shots_inside_box", "shots_outside_box",
+        "corners", "fouls", "offsides", "yellow_cards", "red_cards",
+        "possession_pct", "goalkeeper_saves", "expected_goals", "goals_prevented",
+    ]
     averages = {
         key: round(totals[key] / counts[key], 2) if counts[key] else None
-        for key in ["shots_total", "shots_on_goal", "corners", "fouls", "yellow_cards", "red_cards"]
+        for key in AVG_KEYS
     }
 
     result = {

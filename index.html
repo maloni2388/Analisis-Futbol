@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_7.html -->
+<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_8.html -->
 <html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pizarra — Análisis de fútbol</title>
 <link rel="preconnect" href="https://fonts.googleapis.com/">
-<link href="./index_7_files/css2" rel="stylesheet">
+<link href="./index_8_files/css2" rel="stylesheet">
 <style>
 :root{
   --field-night:#FAFAF7;
@@ -881,14 +881,37 @@ async function loadAdvanced(code) {
       <div class="stat-grid">
         <div class="stat-box"><div class="label">Goles esperados (xG)</div><div class="value amber">${a.expected_goals ?? '—'}</div></div>
         <div class="stat-box"><div class="label">Posesión</div><div class="value">${a.possession_pct != null ? a.possession_pct + '%' : '—'}</div></div>
-        <div class="stat-box"><div class="label">Remates dentro del área</div><div class="value grass">${a.shots_inside_box ?? '—'}</div></div>
-        <div class="stat-box"><div class="label">Remates fuera del área</div><div class="value">${a.shots_outside_box ?? '—'}</div></div>
-        <div class="stat-box"><div class="label">Atajadas del arquero</div><div class="value">${a.goalkeeper_saves ?? '—'}</div></div>
+        <div class="stat-box"><div class="label">Remates en zona de área</div><div class="value grass">${a.shots_inside_box ?? '—'}</div></div>
+        <div class="stat-box"><div class="label">Remates de media/larga distancia</div><div class="value">${a.shots_outside_box ?? '—'}</div></div>
         <div class="stat-box"><div class="label">Fueras de juego</div><div class="value">${a.offsides ?? '—'}</div></div>
       </div>
       <div class="sub" style="font-size:11px;color:var(--chalk-faint);margin:-4px 0 8px;font-family:'JetBrains Mono',monospace;">
         Goles esperados (xG): qué tan buenas fueron las ocasiones generadas, más allá de si terminaron en gol. Un xG bien por encima de los goles reales suele indicar mala definición o mala suerte; bien por debajo, eficacia.
+        "Zona de área" y "media/larga distancia" son por UBICACIÓN del remate en la cancha, no por resultado — un remate dentro del área puede terminar atajado, desviado, bloqueado o gol igual.
       </div>
+
+      <div class="section-label">Remates a puerta vs. por fuera</div>
+      <div class="stat-grid">
+        <div class="stat-box"><div class="label">Remates a puerta (entre los 3 palos, atajado o gol)</div><div class="value amber">${a.shots_on_goal ?? '—'}</div></div>
+        <div class="stat-box"><div class="label">Remates por fuera (no entran a los 3 palos)</div><div class="value red">${a.shots_off_goal ?? '—'}</div></div>
+      </div>
+      <div class="sub" style="font-size:11px;color:var(--chalk-faint);margin:-4px 0 8px;font-family:'JetBrains Mono',monospace;">
+        Los remates bloqueados por un defensor antes de llegar al arco no cuentan en ninguna de las dos columnas (no llegaron a definirse como "a puerta" ni "por fuera").
+      </div>
+      <table>
+        <thead><tr>
+          <th>Fecha</th><th>Rival</th>${isNationalTeamTab ? '<th>Competición</th>' : ''}
+          <th class="num">A puerta</th><th class="num">Por fuera</th>
+        </tr></thead>
+        <tbody>${avgData.per_match_detail.map(m => `
+          <tr>
+            <td>${escapeHtml(m.date)}</td>
+            <td>${escapeHtml(m.opponent)}</td>
+            ${isNationalTeamTab ? `<td>${escapeHtml(LEAGUE_NAME_BY_ID[m.league_id] || ('#' + m.league_id))}</td>` : ''}
+            <td class="num">${m.shots_on_goal ?? '—'}</td>
+            <td class="num">${m.shots_off_goal ?? '—'}</td>
+          </tr>`).join('')}</tbody>
+      </table>
 
       ${avgData.top_shooters && avgData.top_shooters.length ? `
       <div class="section-label">Máximos rematadores (sobre los partidos analizados)</div>
@@ -1094,6 +1117,11 @@ async function loadFriendlies() {
   }
 }
 
+init();
+</script>
+
+
+</body></html>
 init();
 </script>
 

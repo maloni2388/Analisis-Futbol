@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_4.html -->
+<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_5.html -->
 <html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pizarra — Análisis de fútbol</title>
 <link rel="preconnect" href="https://fonts.googleapis.com/">
-<link href="./index_4_files/css2" rel="stylesheet">
+<link href="./index_5_files/css2" rel="stylesheet">
 <style>
 :root{
   --field-night:#FAFAF7;
@@ -652,16 +652,34 @@ async function loadTrends(code) {
         <div class="bv">${data.btts_pct}%</div>
       </div>
 
-      <div class="section-label">Goles propios por mitad (promedio)</div>
-      <div class="bar-row">
-        <div class="bl">1er tiempo</div>
-        <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, data.goals_by_half.avg_first_half / 3 * 100)}%"></div></div>
-        <div class="bv">${data.goals_by_half.avg_first_half}</div>
-      </div>
-      <div class="bar-row">
-        <div class="bl">2do tiempo</div>
-        <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, (data.goals_by_half.avg_second_half||0) / 3 * 100)}%"></div></div>
-        <div class="bv">${data.goals_by_half.avg_second_half ?? '—'}</div>
+      <div class="section-label">Goles por mitad (promedio)</div>
+      <div class="two-col">
+        <div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--chalk-faint);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Anota</div>
+          <div class="bar-row">
+            <div class="bl">1er tiempo</div>
+            <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, data.goals_by_half.avg_first_half / 3 * 100)}%"></div></div>
+            <div class="bv">${data.goals_by_half.avg_first_half}</div>
+          </div>
+          <div class="bar-row">
+            <div class="bl">2do tiempo</div>
+            <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, (data.goals_by_half.avg_second_half||0) / 3 * 100)}%"></div></div>
+            <div class="bv">${data.goals_by_half.avg_second_half ?? '—'}</div>
+          </div>
+        </div>
+        <div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--chalk-faint);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Recibe</div>
+          <div class="bar-row">
+            <div class="bl">1er tiempo</div>
+            <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, data.goals_by_half.avg_first_half_conceded / 3 * 100)}%;background:var(--card-red)"></div></div>
+            <div class="bv">${data.goals_by_half.avg_first_half_conceded}</div>
+          </div>
+          <div class="bar-row">
+            <div class="bl">2do tiempo</div>
+            <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, (data.goals_by_half.avg_second_half_conceded||0) / 3 * 100)}%;background:var(--card-red)"></div></div>
+            <div class="bv">${data.goals_by_half.avg_second_half_conceded ?? '—'}</div>
+          </div>
+        </div>
       </div>
 
       <div class="section-label">Últimos partidos</div>

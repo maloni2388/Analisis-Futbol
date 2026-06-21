@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_5.html -->
+<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_6.html -->
 <html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pizarra — Análisis de fútbol</title>
 <link rel="preconnect" href="https://fonts.googleapis.com/">
-<link href="./index_5_files/css2" rel="stylesheet">
+<link href="./index_6_files/css2" rel="stylesheet">
 <style>
 :root{
   --field-night:#FAFAF7;
@@ -827,6 +827,29 @@ async function loadAdvanced(code) {
       <div class="sub" style="font-size:11px;color:var(--chalk-faint);margin:-4px 0 8px;font-family:'JetBrains Mono',monospace;">
         Goles esperados (xG): qué tan buenas fueron las ocasiones generadas, más allá de si terminaron en gol. Un xG bien por encima de los goles reales suele indicar mala definición o mala suerte; bien por debajo, eficacia.
       </div>
+
+      ${avgData.top_shooters && avgData.top_shooters.length ? `
+      <div class="section-label">Máximos rematadores (sobre los partidos analizados)</div>
+      <table>
+        <thead><tr>
+          <th></th><th>Jugador</th><th class="num">Remates</th><th class="num">Al arco</th><th class="num">Partidos</th>
+        </tr></thead>
+        <tbody>${avgData.top_shooters.map((p, i) => `
+          <tr>
+            <td class="num" style="color:var(--chalk-faint)">${i + 1}</td>
+            <td><div class="pos-cell">
+              ${p.photo ? `<img class="crest" src="${escapeHtml(p.photo)}" loading="lazy" onerror="this.style.display='none'" style="border-radius:50%;"/>` : ''}
+              <span class="team-name">${escapeHtml(p.name)}</span>
+            </div></td>
+            <td class="num" style="color:var(--amber);font-weight:600;">${p.shots_total}</td>
+            <td class="num">${p.shots_on_goal}</td>
+            <td class="num" style="color:var(--chalk-faint)">${p.matches}</td>
+          </tr>`).join('')}</tbody>
+      </table>
+      <div style="font-size:11px;color:var(--chalk-faint);font-family:'JetBrains Mono',monospace;margin:-4px 0 8px;">
+        La API no desglosa remates dentro/fuera del área por jugador, solo a nivel equipo (ver arriba).
+      </div>
+      ` : ''}
 
       <div class="section-label">Detalle por partido</div>
       <table>

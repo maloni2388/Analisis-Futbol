@@ -232,6 +232,8 @@ def team_trends(code):
     failed_to_score = 0   # partidos sin anotar
     ht_goals_scored = []
     st_goals_scored = []  # goles del equipo en el segundo tiempo (fulltime - halftime)
+    ht_goals_conceded = []
+    st_goals_conceded = []  # goles recibidos en el segundo tiempo
     btts = 0
     wins = draws = losses = 0
     sample = []
@@ -241,6 +243,7 @@ def team_trends(code):
         gf = m["score"]["fullTime"]["home"] if is_home else m["score"]["fullTime"]["away"]
         ga = m["score"]["fullTime"]["away"] if is_home else m["score"]["fullTime"]["home"]
         ht_gf = m["score"]["halfTime"]["home"] if is_home else m["score"]["halfTime"]["away"]
+        ht_ga = m["score"]["halfTime"]["away"] if is_home else m["score"]["halfTime"]["home"]
 
         scored.append(gf)
         conceded.append(ga)
@@ -258,6 +261,8 @@ def team_trends(code):
 
         ht_goals_scored.append(ht_gf if ht_gf is not None else 0)
         st_goals_scored.append((gf - ht_gf) if ht_gf is not None else None)
+        ht_goals_conceded.append(ht_ga if ht_ga is not None else 0)
+        st_goals_conceded.append((ga - ht_ga) if ht_ga is not None else None)
 
         winner = m["score"]["winner"]
         if winner == "DRAW":
@@ -278,6 +283,7 @@ def team_trends(code):
 
     n = len(team_matches)
     valid_st = [g for g in st_goals_scored if g is not None]
+    valid_st_conceded = [g for g in st_goals_conceded if g is not None]
 
     result = {
         "competition_code": code,
@@ -302,7 +308,9 @@ def team_trends(code):
         "goals_by_half": {
             "avg_first_half": round(sum(ht_goals_scored) / n, 2),
             "avg_second_half": round(sum(valid_st) / len(valid_st), 2) if valid_st else None,
-            "note": "Goles propios anotados en cada mitad (no incluye los del rival).",
+            "avg_first_half_conceded": round(sum(ht_goals_conceded) / n, 2),
+            "avg_second_half_conceded": round(sum(valid_st_conceded) / len(valid_st_conceded), 2) if valid_st_conceded else None,
+            "note": "Promedio de goles propios y del rival, anotados/recibidos en cada mitad.",
         },
         "tendency_over_2_5_team_goals": (
             "Sí, suele superar 2.5 goles propios por partido"

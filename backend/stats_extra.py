@@ -19,7 +19,7 @@ USO PERSONAL / ANÁLISIS. No es asesoramiento financiero.
 
 import os
 from collections import Counter, defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import requests
 from flask import Blueprint, jsonify, request
@@ -179,15 +179,88 @@ def _get_active_season(code):
     return None, "No se encontró temporada con partidos disponibles."
 
 
+def _resolve_fd_team_id(code, team_name):
+    """
+    Busca el ID numérico de football-data.org para un equipo, dentro de
+    una competición dada (el plan free no tiene búsqueda libre de equipos
+    por nombre, hay que listar los equipos de una competición y filtrar
+    ahí). Devuelve (team_id, team_full_name, error).
+    """
+    data, err = fetch_fd(f"/competitions/{code}/teams", ttl=3600)
+    if err:
+        return None, None, err
+    team_lower = team_name.strip().lower()
+    teams = data.get("teams", [])
+    exact = [t for t in teams if t["name"].lower() == team_lower or t.get("shortName", "").lower() == team_lower]
+    partial = [t for t in teams if team_lower in t["name"].lower()]
+    match = (exact or partial or [None])[0]
+    if not match:
+        return None, None, f"No se encontró un equipo que coincida con '{team_name}' en {code}."
+    return match["id"], match["name"], None
+
+
+def _fetch_fd_team_matches(team_id, max_n, competition_filter=None):
+    """
+    Trae los últimos partidos FINALIZADOS de un equipo en football-data.org,
+    mezclando TODAS las competiciones donde participa (liga local, copas
+    domésticas si las hay, torneo continental) en una sola llamada — usa
+    /teams/{id}/matches con rango de fechas, que es el único endpoint que
+    no obliga a elegir una competición de antemano.
+
+    competition_filter: código opcional (ej "PL", "CL") para acotar el
+    resultado a una sola competición después de traerlas todas.
+
+    OJO: football-data.org limita el rango de fechas a 750 días — para
+    equipos con pocos partidos recientes (ej. selecciones que solo juegan
+    cada tanto) esto puede no alcanzar a juntar max_n partidos; es una
+    limitación de cobertura de datos, no del código.
+    """
+    today = datetime.now(timezone.utc).date()
+    date_from = today - timedelta(days=730)
+    data, err = fetch_fd(
+        f"/teams/{team_id}/matches",
+        params={
+            "dateFrom": date_from.isoformat(),
+            "dateTo": today.isoformat(),
+        },
+        ttl=300,
+    )
+    if err:
+        return None, err
+
+    matches = [m for m in data.get("matches", []) if m.get("status") == "FINISHED"]
+    if competition_filter:
+        cf = competition_filter.strip().upper()
+        matches = [m for m in matches if m["competition"]["code"] == cf]
+
+    matches.sort(key=lambda m: m["utcDate"], reverse=True)
+    return matches[:max_n], None
+
+
 @extra_bp.route("/api/team-trends/<code>", methods=["GET"])
 def team_trends(code):
+
     """
-    Tendencia de goles de UN equipo dentro de una competición: cuántos
-    partidos hace/recibe más de 2.5 goles, promedio anotado/recibido,
-    BTTS, clean sheets, etc. Sobre los últimos N partidos del equipo
-    (no de la competición entera).
+    Tendencia de goles de UN equipo: cuántos partidos hace/recibe más de
+    2.5 goles, promedio anotado/recibido, BTTS, clean sheets, etc. Sobre
+    los últimos N partidos del equipo.
+
+    Por defecto junta TODAS las competiciones donde participa el equipo
+    (liga local + copas/torneos continentales que tenga football-data.org
+    asociados), no solo la competición pasada en la URL — el código de la
+    URL solo se usa para encontrar el ID del equipo. Para acotar a una
+    sola competición, usar ?competition=<código> (ej. ?competition=CL).
+
+    NOTA sobre selecciones nacionales: football-data.org no tiene cargadas
+    las eliminatorias mundialistas ni amistosos de selecciones, solo el
+    torneo final (Mundial/Eurocopa) — así que para selecciones este
+    endpoint puede devolver pocos partidos por limitación real de datos,
+    no por un error de búsqueda. Para selecciones, el dashboard usa en su
+    lugar el motor de api-sports.io (mismo que "Remates & tarjetas"), que
+    sí cubre eliminatorias y amistosos.
 
     Ejemplo: /api/team-trends/PL?team=Arsenal&last_n=20
+    Ejemplo con filtro: /api/team-trends/PL?team=Arsenal&last_n=20&competition=CL
     """
     code = code.upper()
     team_name = request.args.get("team", "").strip()
@@ -195,34 +268,28 @@ def team_trends(code):
         return jsonify({"error": "Falta el parámetro ?team=<nombre del equipo>"}), 400
 
     last_n = int(request.args.get("last_n", 20))
-    season = request.args.get("season")
+    competition_filter = request.args.get("competition", "").strip() or None
 
-    if not season:
-        season, err = _get_active_season(code)
-        if err:
-            return jsonify({"error": err}), 502
-
-    data, err = fetch_fd(
-        f"/competitions/{code}/matches",
-        params={"season": season, "status": "FINISHED"},
-    )
+    team_id, team_full_name, err = _resolve_fd_team_id(code, team_name)
     if err:
         return jsonify({"error": err}), 502
 
-    raw_matches = data.get("matches", [])
-    team_lower = team_name.lower()
-    team_matches = [
-        m for m in raw_matches
-        if team_lower in m["homeTeam"]["name"].lower() or team_lower in m["awayTeam"]["name"].lower()
-    ]
+    team_matches, err2 = _fetch_fd_team_matches(team_id, last_n, competition_filter)
+    if err2:
+        return jsonify({"error": err2}), 502
 
     if not team_matches:
-        return jsonify({
-            "error": f"No se encontraron partidos para un equipo que coincida con '{team_name}' en esta competición/temporada."
-        }), 404
+        msg = (
+            f"No se encontraron partidos finalizados recientes para '{team_full_name}'"
+            + (f" en la competición {competition_filter}" if competition_filter else "")
+            + ". Si es una selección nacional, football-data.org puede no tener "
+              "cargadas sus eliminatorias o amistosos — esa cobertura completa "
+              "está en la pestaña Remates & tarjetas."
+        )
+        return jsonify({"error": msg}), 404
 
-    team_matches.sort(key=lambda m: m["utcDate"], reverse=True)
-    team_matches = team_matches[:last_n]
+    competitions_in_sample = sorted(set(m["competition"]["code"] for m in team_matches))
+    team_name = team_full_name  # para que el resto de la función (y la respuesta) use el nombre completo real
 
     scored = []      # goles anotados por el equipo, partido a partido
     conceded = []     # goles recibidos
@@ -239,7 +306,7 @@ def team_trends(code):
     sample = []
 
     for m in team_matches:
-        is_home = team_lower in m["homeTeam"]["name"].lower()
+        is_home = m["homeTeam"]["id"] == team_id
         gf = m["score"]["fullTime"]["home"] if is_home else m["score"]["fullTime"]["away"]
         ga = m["score"]["fullTime"]["away"] if is_home else m["score"]["fullTime"]["home"]
         ht_gf = m["score"]["halfTime"]["home"] if is_home else m["score"]["halfTime"]["away"]
@@ -279,6 +346,7 @@ def team_trends(code):
             "opponent": opponent,
             "goalsFor": gf,
             "goalsAgainst": ga,
+            "competition": m["competition"]["code"],
         })
 
     n = len(team_matches)
@@ -287,6 +355,8 @@ def team_trends(code):
 
     result = {
         "competition_code": code,
+        "competition_filter_applied": competition_filter,
+        "competitions_in_sample": competitions_in_sample,
         "team_matched": team_name,
         "sample_size": n,
         "record": {"won": wins, "draw": draws, "lost": losses},
@@ -793,6 +863,39 @@ def team_match_stats_avg(league_id, team_id):
     return jsonify(result)
 
 
+def _fetch_apisports_multi_league_fixtures(team_id, league_ids, last_n):
+    """
+    Junta fixtures FINALIZADOS de un equipo en VARIAS ligas de api-sports.io
+    a la vez, y devuelve los last_n más recientes en el tiempo real, sin
+    importar de qué liga vienen. Reutilizado por team_match_stats_multi
+    (remates/tarjetas) y team_trends_multi (tendencias de goles) para no
+    duplicar la misma búsqueda dos veces.
+
+    Devuelve (lista_de_(league_id, fixture), error).
+    """
+    all_fixtures = []
+    seen_fixture_ids = set()
+    for lg_id in league_ids:
+        fixtures_data, err = fetch_apisports(
+            "/fixtures",
+            params={"team": team_id, "league": lg_id, "last": last_n, "status": "FT"},
+        )
+        if err:
+            continue  # esta competición puede no tener datos para este equipo; seguimos con las demás
+        for fx in fixtures_data.get("response", []):
+            fid = fx["fixture"]["id"]
+            if fid in seen_fixture_ids:
+                continue
+            seen_fixture_ids.add(fid)
+            all_fixtures.append((lg_id, fx))
+
+    if not all_fixtures:
+        return None, "No se encontraron partidos finalizados para este equipo en ninguna de las competiciones consultadas."
+
+    all_fixtures.sort(key=lambda pair: pair[1]["fixture"]["date"], reverse=True)
+    return all_fixtures[:last_n], None
+
+
 @extra_bp.route("/api/team-match-stats-multi/<int:team_id>", methods=["GET"])
 def team_match_stats_multi(team_id):
     """
@@ -823,33 +926,9 @@ def team_match_stats_multi(team_id):
     if not league_ids:
         return jsonify({"error": "Falta el parámetro ?league_ids=1,32,34,..."}), 400
 
-    # 1) Juntar fixtures finalizados de TODAS las competiciones candidatas.
-    all_fixtures = []
-    seen_fixture_ids = set()
-    for lg_id in league_ids:
-        fixtures_data, err = fetch_apisports(
-            "/fixtures",
-            params={"team": team_id, "league": lg_id, "last": last_n, "status": "FT"},
-        )
-        if err:
-            continue  # esta competición puede no tener datos para este equipo; seguimos con las demás
-        for fx in fixtures_data.get("response", []):
-            fid = fx["fixture"]["id"]
-            if fid in seen_fixture_ids:
-                continue
-            seen_fixture_ids.add(fid)
-            all_fixtures.append((lg_id, fx))
-
-    if not all_fixtures:
-        return jsonify({
-            "error": "No se encontraron partidos finalizados para este equipo en ninguna de las competiciones consultadas."
-        }), 404
-
-    # 2) Ordenar TODOS los fixtures juntos por fecha real (lo más reciente
-    # primero) y quedarnos solo con los N más nuevos, sin importar de qué
-    # competición vienen.
-    all_fixtures.sort(key=lambda pair: pair[1]["fixture"]["date"], reverse=True)
-    selected = all_fixtures[:last_n]
+    selected, err = _fetch_apisports_multi_league_fixtures(team_id, league_ids, last_n)
+    if err:
+        return jsonify({"error": err}), 404
 
     # 3) Traer estadísticas de cada uno de esos partidos seleccionados.
     totals = defaultdict(float)
@@ -967,3 +1046,160 @@ def team_match_stats_multi(team_id):
     }
     return jsonify(result)
 
+
+@extra_bp.route("/api/team-trends-multi/<int:team_id>", methods=["GET"])
+def team_trends_multi(team_id):
+    """
+    Igual que /api/team-trends pero para SELECCIONES NACIONALES: junta
+    partidos de varias ligas de api-sports.io (Mundial, Eurocopa,
+    eliminatorias por confederación, amistosos) en vez de una sola
+    competición de football-data.org, porque football-data.org no tiene
+    cargadas las eliminatorias ni los amistosos de selecciones — solo el
+    torneo final. Calcula las mismas métricas que /api/team-trends
+    (goles a favor/contra, BTTS, clean sheets, goles por mitad) pero a
+    partir de los datos de api-sports.io.
+
+    Ejemplo: /api/team-trends-multi/2382?league_ids=1,4,32,34,29,30,31,33,10&last_n=10
+    """
+    last_n = int(request.args.get("last_n", 10))
+    if last_n > 20:
+        return jsonify({"error": "last_n máximo permitido: 20 (para cuidar la cuota diaria)."}), 400
+
+    league_ids_param = request.args.get("league_ids", "")
+    try:
+        league_ids = [int(x) for x in league_ids_param.split(",") if x.strip()]
+    except ValueError:
+        return jsonify({"error": "league_ids inválido, esperaba una lista de números separados por coma."}), 400
+    if not league_ids:
+        return jsonify({"error": "Falta el parámetro ?league_ids=1,32,34,..."}), 400
+
+    competition_filter = request.args.get("league_id_filter")
+    if competition_filter:
+        try:
+            competition_filter = int(competition_filter)
+        except ValueError:
+            return jsonify({"error": "league_id_filter debe ser un número."}), 400
+
+    selected, err = _fetch_apisports_multi_league_fixtures(team_id, league_ids, last_n)
+    if err:
+        return jsonify({"error": err}), 404
+
+    if competition_filter:
+        selected = [(lg_id, fx) for lg_id, fx in selected if lg_id == competition_filter]
+        if not selected:
+            return jsonify({
+                "error": f"No se encontraron partidos para este equipo en la competición #{competition_filter}."
+            }), 404
+
+    team_name_real = selected[0][1]["teams"]["home"]["name"] if selected[0][1]["teams"]["home"]["id"] == team_id else selected[0][1]["teams"]["away"]["name"]
+
+    scored = []
+    conceded = []
+    over_25_scored = 0
+    over_15_scored = 0
+    clean_sheets = 0
+    failed_to_score = 0
+    ht_goals_scored = []
+    st_goals_scored = []
+    ht_goals_conceded = []
+    st_goals_conceded = []
+    btts = 0
+    wins = draws = losses = 0
+    sample = []
+    leagues_used = set()
+
+    for lg_id, fx in selected:
+        is_home = fx["teams"]["home"]["id"] == team_id
+        gf = fx["goals"]["home"] if is_home else fx["goals"]["away"]
+        ga = fx["goals"]["away"] if is_home else fx["goals"]["home"]
+        if gf is None or ga is None:
+            continue  # partido sin marcador final cargado, lo salteamos
+
+        ht = fx.get("score", {}).get("halftime", {}) or {}
+        ht_gf = ht.get("home") if is_home else ht.get("away")
+        ht_ga = ht.get("away") if is_home else ht.get("home")
+
+        scored.append(gf)
+        conceded.append(ga)
+
+        if gf >= 3:
+            over_25_scored += 1
+        if gf >= 2:
+            over_15_scored += 1
+        if ga == 0:
+            clean_sheets += 1
+        if gf == 0:
+            failed_to_score += 1
+        if gf > 0 and ga > 0:
+            btts += 1
+
+        ht_goals_scored.append(ht_gf if ht_gf is not None else 0)
+        st_goals_scored.append((gf - ht_gf) if ht_gf is not None else None)
+        ht_goals_conceded.append(ht_ga if ht_ga is not None else 0)
+        st_goals_conceded.append((ga - ht_ga) if ht_ga is not None else None)
+
+        if gf > ga:
+            wins += 1
+        elif gf < ga:
+            losses += 1
+        else:
+            draws += 1
+
+        leagues_used.add(lg_id)
+        opponent = fx["teams"]["away"]["name"] if is_home else fx["teams"]["home"]["name"]
+        sample.append({
+            "date": fx["fixture"]["date"][:10],
+            "venue": "local" if is_home else "visitante",
+            "opponent": opponent,
+            "goalsFor": gf,
+            "goalsAgainst": ga,
+            "league_id": lg_id,
+        })
+
+    n = len(sample)
+    if n == 0:
+        return jsonify({
+            "error": "Ninguno de los partidos encontrados tenía marcador final disponible para calcular tendencias."
+        }), 404
+
+    valid_st = [g for g in st_goals_scored if g is not None]
+    valid_st_conceded = [g for g in st_goals_conceded if g is not None]
+
+    result = {
+        "team_id": team_id,
+        "team_matched": team_name_real,
+        "leagues_searched": league_ids,
+        "leagues_used": sorted(leagues_used),
+        "league_id_filter_applied": competition_filter,
+        "sample_size": n,
+        "record": {"won": wins, "draw": draws, "lost": losses},
+        "goals_for": {
+            "avg_per_match": round(sum(scored) / n, 2),
+            "matches_with_2plus_goals": over_15_scored,
+            "matches_with_2plus_goals_pct": round(over_15_scored / n * 100, 1),
+            "matches_with_3plus_goals": over_25_scored,
+            "matches_with_3plus_goals_pct": round(over_25_scored / n * 100, 1),
+            "failed_to_score_count": failed_to_score,
+            "failed_to_score_pct": round(failed_to_score / n * 100, 1),
+        },
+        "goals_against": {
+            "avg_per_match": round(sum(conceded) / n, 2),
+            "clean_sheets": clean_sheets,
+            "clean_sheets_pct": round(clean_sheets / n * 100, 1),
+        },
+        "btts_pct": round(btts / n * 100, 1),
+        "goals_by_half": {
+            "avg_first_half": round(sum(ht_goals_scored) / n, 2),
+            "avg_second_half": round(sum(valid_st) / len(valid_st), 2) if valid_st else None,
+            "avg_first_half_conceded": round(sum(ht_goals_conceded) / n, 2),
+            "avg_second_half_conceded": round(sum(valid_st_conceded) / len(valid_st_conceded), 2) if valid_st_conceded else None,
+            "note": "Promedio de goles propios y del rival, anotados/recibidos en cada mitad.",
+        },
+        "tendency_over_2_5_team_goals": (
+            "Sí, suele superar 2.5 goles propios por partido"
+            if (sum(scored) / n) > 2.5 else
+            "No, normalmente anota 2.5 goles propios o menos por partido"
+        ),
+        "recent_matches": sample,
+    }
+    return jsonify(result)

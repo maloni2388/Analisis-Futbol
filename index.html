@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_8.html -->
+<!-- saved from url=(0040)file:///C:/Users/PC/Downloads/index.html -->
 <html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pizarra — Análisis de fútbol</title>
 <link rel="preconnect" href="https://fonts.googleapis.com/">
-<link href="./index_8_files/css2" rel="stylesheet">
+<link href="./index_files/css2" rel="stylesheet">
 <style>
 :root{
   --field-night:#FAFAF7;
@@ -209,6 +209,15 @@ tbody tr:hover{background:rgba(91,174,124,0.06);}
   .two-col{grid-template-columns:1fr;}
   .match-row{grid-template-columns:1fr auto 1fr;}
   .match-date,.match-stage{display:none;}
+}
+
+.compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:start;}
+.compare-col{min-width:0;}
+.compare-col table{font-size:11px;}
+@media (max-width:900px){
+  .compare-grid{grid-template-columns:1fr;gap:0;}
+  .compare-col{padding-bottom:24px;margin-bottom:24px;border-bottom:2px solid var(--field-line);}
+  .compare-col:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0;}
 }
 
 footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--field-line);font-size:11px;color:var(--chalk-faint);font-family:'JetBrains Mono',monospace;}
@@ -416,7 +425,7 @@ const TABS_NEEDING = {
   matches: { competition: true, team: false, team2: false, confed: false, trendsFilter: false },
   trends: { competition: true, team: true, team2: false, confed: false, trendsFilter: true },
   h2h: { competition: true, team: true, team2: true, confed: false, trendsFilter: false },
-  advanced: { competition: true, team: true, team2: false, confed: false, trendsFilter: false },
+  advanced: { competition: true, team: true, team2: true, confed: false, trendsFilter: false },
   knockout: { competition: true, team: false, team2: false, confed: false, trendsFilter: false },
   qualifiers: { competition: false, team: false, team2: false, confed: true, trendsFilter: false },
   friendlies: { competition: false, team: true, team2: false, confed: false, trendsFilter: false },
@@ -429,9 +438,16 @@ function updateControlsVisibility() {
   team2Input.style.display = need.team2 ? '' : 'none';
   confedSelect.style.display = need.confed ? '' : 'none';
   trendsCompFilter.style.display = need.trendsFilter ? '' : 'none';
-  teamInput.placeholder = currentTab === 'friendlies'
-    ? 'Selección (ej: Argentina) — vacío trae las más recientes'
-    : 'Nombre del equipo (ej: Arsenal)';
+  if (currentTab === 'friendlies') {
+    teamInput.placeholder = 'Selección (ej: Argentina) — vacío trae las más recientes';
+  } else if (currentTab === 'advanced') {
+    teamInput.placeholder = 'Equipo A (ej: Arsenal)';
+  } else {
+    teamInput.placeholder = 'Nombre del equipo (ej: Arsenal)';
+  }
+  team2Input.placeholder = currentTab === 'advanced'
+    ? 'Equipo B (opcional, para comparar)'
+    : 'Rival (solo para Cara a cara, ej: Chelsea)';
 }
 
 backendUrlBtn.addEventListener('click', () => {
@@ -785,14 +801,143 @@ async function loadTrends(code) {
   }
 }
 
+async function fetchAdvancedDataForTeam(team, code, isNationalTeamTab) {
+  // Devuelve { teamMatch, avgData, leagueId } para UN equipo, o lanza un
+  // Error con un mensaje ya pensado para mostrarse tal cual al usuario.
+  const teamSearch = await apiFetch('/api/apisports/search-team?name=' + encodeURIComponent(translateTeamSearch(team)));
+  const pool = isNationalTeamTab
+    ? teamSearch.results.filter(t => t.national)
+    : teamSearch.results.filter(t => !t.national);
+  const exactMatches = pool.filter(t => t.name.toLowerCase() === team.toLowerCase());
+  const teamMatch = exactMatches[0] || pool[0] || teamSearch.results[0];
+  if (!teamMatch) {
+    throw new Error(`No hay coincidencias para "${team}" en api-sports.io.`);
+  }
+
+  let leagueId = null;
+  let avgData = null;
+
+  if (isNationalTeamTab) {
+    avgData = await apiFetch(
+      '/api/team-match-stats-multi/' + teamMatch.id +
+      '?league_ids=' + NATIONAL_TEAM_LEAGUE_CANDIDATES.join(',') +
+      '&last_n=10'
+    );
+    if (!avgData || !avgData.matches_analyzed) {
+      throw new Error(`Probamos Mundial, Eurocopa, las 6 eliminatorias continentales y amistosos para "${teamMatch.name}" y no había datos de remates/tarjetas disponibles todavía.`);
+    }
+  } else {
+    leagueId = APISPORTS_LEAGUE_ID_BY_CODE[code] || null;
+    if (!leagueId) {
+      const leagueNameGuess = currentCompetitions.leagues_de_clubes && currentCompetitions.leagues_de_clubes[code];
+      if (leagueNameGuess) {
+        const leagueSearch = await apiFetch('/api/apisports/search-league?name=' + encodeURIComponent(leagueNameGuess.split(' (')[0]));
+        const leagueMatch = leagueSearch.results[0];
+        leagueId = leagueMatch ? leagueMatch.id : null;
+      }
+    }
+    if (!leagueId) {
+      throw new Error('Esta competición todavía no tiene mapeo automático a api-sports.io en este prototipo.');
+    }
+    avgData = await apiFetch('/api/team-match-stats-avg/' + leagueId + '/' + teamMatch.id + '?last_n=10');
+  }
+
+  return { teamMatch, avgData, leagueId };
+}
+
+function renderAdvancedBlock(teamMatch, avgData, leagueId, isNationalTeamTab, compact) {
+  const a = avgData.averages_per_match;
+  return `
+    <div class="section-label">${escapeHtml(teamMatch.name)} — promedio sobre ${avgData.matches_analyzed} partidos recientes${
+      isNationalTeamTab
+        ? (avgData.leagues_used && avgData.leagues_used.length > 1 ? ' (varias competiciones)' : '')
+        : ` (liga api-sports.io #${leagueId})`
+    }</div>
+
+    <div class="stat-grid">
+      <div class="stat-box"><div class="label">Remates totales</div><div class="value amber">${a.shots_total ?? '—'}</div></div>
+      <div class="stat-box"><div class="label">Remates al arco</div><div class="value">${a.shots_on_goal ?? '—'}</div></div>
+      <div class="stat-box"><div class="label">Corners</div><div class="value grass">${a.corners ?? '—'}</div></div>
+      <div class="stat-box"><div class="label">Faltas</div><div class="value">${a.fouls ?? '—'}</div></div>
+      <div class="stat-box"><div class="label">Tarjetas amarillas</div><div class="value" style="color:var(--card-yellow)">${a.yellow_cards ?? '—'}</div></div>
+      <div class="stat-box"><div class="label">Tarjetas rojas</div><div class="value red">${a.red_cards ?? 0}</div></div>
+    </div>
+
+    <div class="section-label">Calidad de juego (avanzado)</div>
+    <div class="stat-grid">
+      <div class="stat-box"><div class="label">Goles esperados (xG)</div><div class="value amber">${a.expected_goals ?? '—'}</div></div>
+      <div class="stat-box"><div class="label">Posesión</div><div class="value">${a.possession_pct != null ? a.possession_pct + '%' : '—'}</div></div>
+      <div class="stat-box"><div class="label">Remates en zona de área</div><div class="value grass">${a.shots_inside_box ?? '—'}</div></div>
+      <div class="stat-box"><div class="label">Remates de media/larga distancia</div><div class="value">${a.shots_outside_box ?? '—'}</div></div>
+      <div class="stat-box"><div class="label">Fueras de juego</div><div class="value">${a.offsides ?? '—'}</div></div>
+    </div>
+
+    <div class="section-label">Remates a puerta vs. por fuera</div>
+    <div class="stat-grid">
+      <div class="stat-box"><div class="label">A puerta</div><div class="value amber">${a.shots_on_goal ?? '—'}</div></div>
+      <div class="stat-box"><div class="label">Por fuera</div><div class="value red">${a.shots_off_goal ?? '—'}</div></div>
+    </div>
+
+    ${avgData.top_shooters && avgData.top_shooters.length ? `
+    <div class="section-label">Máximos rematadores</div>
+    <table>
+      <thead><tr>
+        <th></th><th>Jugador</th><th class="num">Remates</th><th class="num">Al arco</th>
+      </tr></thead>
+      <tbody>${avgData.top_shooters.slice(0, 5).map((p, i) => `
+        <tr>
+          <td class="num" style="color:var(--chalk-faint)">${i + 1}</td>
+          <td><div class="pos-cell">
+            ${p.photo ? `<img class="crest" src="${escapeHtml(p.photo)}" loading="lazy" onerror="this.style.display='none'" style="border-radius:50%;"/>` : ''}
+            <span class="team-name">${escapeHtml(p.name)}</span>
+          </div></td>
+          <td class="num" style="color:var(--amber);font-weight:600;">${p.shots_total}</td>
+          <td class="num">${p.shots_on_goal}</td>
+        </tr>`).join('')}</tbody>
+    </table>
+    ` : ''}
+
+    <div class="section-label">Detalle por partido</div>
+    <table>
+      <thead><tr>
+        <th>Fecha</th><th>Rival</th>${isNationalTeamTab ? '<th>Comp.</th>' : ''}
+        <th class="num">Rem.</th><th class="num">Arco</th>
+        ${compact
+          ? '<th class="num">Cor.</th><th class="num">Goles</th><th class="num">Flt.</th><th class="num">Am.</th>'
+          : '<th class="num">xG</th><th class="num">Pos.</th><th class="num">Cor.</th><th class="num">Flt.</th><th class="num">Am.</th><th class="num">Roj.</th>'}
+      </tr></thead>
+      <tbody>${avgData.per_match_detail.map(m => `
+        <tr>
+          <td>${escapeHtml(compact ? m.date.slice(5) : m.date)}</td>
+          <td>${escapeHtml(m.opponent)}</td>
+          ${isNationalTeamTab ? `<td>${escapeHtml(LEAGUE_NAME_BY_ID[m.league_id] || ('#' + m.league_id))}</td>` : ''}
+          <td class="num">${m.shots_total ?? '—'}</td>
+          <td class="num">${m.shots_on_goal ?? '—'}</td>
+          ${compact ? `
+          <td class="num">${m.corners ?? '—'}</td>
+          <td class="num">${m.goals_for ?? '—'}</td>
+          <td class="num">${m.fouls ?? '—'}</td>
+          <td class="num">${m.yellow_cards ?? '—'}</td>` : `
+          <td class="num">${m.expected_goals ?? '—'}</td>
+          <td class="num">${m.possession_pct != null ? m.possession_pct + '%' : '—'}</td>
+          <td class="num">${m.corners ?? '—'}</td>
+          <td class="num">${m.fouls ?? '—'}</td>
+          <td class="num">${m.yellow_cards ?? '—'}</td>
+          <td class="num">${m.red_cards ?? 0}</td>`}
+        </tr>`).join('')}</tbody>
+    </table>`;
+}
+
 async function loadAdvanced(code) {
   const panel = document.getElementById('panel-advanced');
   const team = teamInput.value.trim();
+  const team2 = team2Input.value.trim();
   if (!team) {
-    panel.innerHTML = `<div class="empty-state"><i class="ti ti-search"></i>Escribí el nombre de un equipo arriba (ej: Arsenal o Ecuador) y tocá "Cargar". Esta pestaña usa api-sports.io: hay que tener APISPORTS_KEY configurada en el backend.</div>`;
+    panel.innerHTML = `<div class="empty-state"><i class="ti ti-search"></i>Escribí el nombre de un equipo arriba (ej: Arsenal o Ecuador) y tocá "Cargar". Para comparar dos equipos, completá también el campo "Equipo B". Esta pestaña usa api-sports.io: hay que tener APISPORTS_KEY configurada en el backend.</div>`;
     return;
   }
-  panel.innerHTML = loadingBox('buscando equipo en api-sports.io...');
+  const isNationalTeamTab = ['WC', 'EC', 'CL', 'CLI'].includes(code);
+  panel.innerHTML = loadingBox(team2 ? `comparando ${team} vs ${team2}...` : 'buscando equipo en api-sports.io...');
   try {
     const statusData = await apiFetch('/api/apisports/status');
     if (!statusData.configured) {
@@ -800,164 +945,33 @@ async function loadAdvanced(code) {
       return;
     }
 
-    const teamSearch = await apiFetch('/api/apisports/search-team?name=' + encodeURIComponent(translateTeamSearch(team)));
-    // Para selecciones (ej: Ecuador) el equipo correcto tiene national=true;
-    // para clubes (ej: Arsenal) tiene national=false. Probamos exacto en
-    // ambos universos antes de conformarnos con el primer resultado.
-    const isNationalTeamTab = ['WC', 'EC', 'CL', 'CLI'].includes(code);
-    const pool = isNationalTeamTab
-      ? teamSearch.results.filter(t => t.national)
-      : teamSearch.results.filter(t => !t.national);
-    const exactMatches = pool.filter(t => t.name.toLowerCase() === team.toLowerCase());
-    const teamMatch = exactMatches[0] || pool[0] || teamSearch.results[0];
-    if (!teamMatch) {
-      panel.innerHTML = errorBox('Equipo no encontrado en api-sports.io', `No hay coincidencias para "${team}".`);
+    if (!team2) {
+      // Comportamiento original: un solo equipo, una columna.
+      const { teamMatch, avgData, leagueId } = await fetchAdvancedDataForTeam(team, code, isNationalTeamTab);
+      panel.innerHTML = renderAdvancedBlock(teamMatch, avgData, leagueId, isNationalTeamTab, false);
       return;
     }
 
-    // IDs de liga en api-sports.io para selecciones/copas. Para clubes,
-    // un solo candidato (la liga elegida arriba). Para selecciones
-    // nacionales, consultamos TODAS estas competiciones a la vez (Mundial,
-    // Eurocopa, eliminatorias por confederación, y amistosos) y nos
-    // quedamos con los N partidos más recientes en el tiempo real, sin
-    // importar de cuál de ellas vienen — porque el partido más nuevo de
-    // una selección puede ser un amistoso o un partido del torneo final,
-    // mientras el grueso de su historial está en la eliminatoria.
+    // Dos equipos: los pedimos en paralelo y mostramos uno al lado del
+    // otro. Si uno de los dos falla (ej: no se encontró ese nombre), igual
+    // mostramos el que sí funcionó en vez de tirar todo.
+    const [resA, resB] = await Promise.allSettled([
+      fetchAdvancedDataForTeam(team, code, isNationalTeamTab),
+      fetchAdvancedDataForTeam(team2, code, isNationalTeamTab),
+    ]);
 
-    let leagueId = null;
-    let avgData = null;
-
-    if (isNationalTeamTab) {
-      panel.innerHTML = loadingBox('buscando los partidos más recientes en Mundial, eliminatorias y amistosos...');
-      avgData = await apiFetch(
-        '/api/team-match-stats-multi/' + teamMatch.id +
-        '?league_ids=' + NATIONAL_TEAM_LEAGUE_CANDIDATES.join(',') +
-        '&last_n=10'
-      );
-      if (!avgData || !avgData.matches_analyzed) {
-        panel.innerHTML = errorBox(
-          'No se encontraron partidos con estadísticas para esta selección',
-          `Probamos Mundial, Eurocopa, las 6 eliminatorias continentales y amistosos para "${teamMatch.name}" y no había datos de remates/tarjetas disponibles todavía.`
-        );
-        return;
-      }
-    } else {
-      leagueId = APISPORTS_LEAGUE_ID_BY_CODE[code] || null;
-      if (!leagueId) {
-        const leagueNameGuess = currentCompetitions.leagues_de_clubes && currentCompetitions.leagues_de_clubes[code];
-        if (leagueNameGuess) {
-          const leagueSearch = await apiFetch('/api/apisports/search-league?name=' + encodeURIComponent(leagueNameGuess.split(' (')[0]));
-          const leagueMatch = leagueSearch.results[0];
-          leagueId = leagueMatch ? leagueMatch.id : null;
-        }
-      }
-      if (!leagueId) {
-        panel.innerHTML = errorBox('No se pudo resolver el ID de liga en api-sports.io', 'Esta competición todavía no tiene mapeo automático a api-sports.io en este prototipo.');
-        return;
-      }
-      panel.innerHTML = loadingBox('calculando promedios de remates / corners / tarjetas (puede tardar unos segundos)...');
-      avgData = await apiFetch('/api/team-match-stats-avg/' + leagueId + '/' + teamMatch.id + '?last_n=10');
-    }
-
-    const a = avgData.averages_per_match;
+    const colA = resA.status === 'fulfilled'
+      ? renderAdvancedBlock(resA.value.teamMatch, resA.value.avgData, resA.value.leagueId, isNationalTeamTab, true)
+      : `<div class="empty-state" style="padding:20px;"><i class="ti ti-alert-circle"></i> ${escapeHtml(resA.reason.message)}</div>`;
+    const colB = resB.status === 'fulfilled'
+      ? renderAdvancedBlock(resB.value.teamMatch, resB.value.avgData, resB.value.leagueId, isNationalTeamTab, true)
+      : `<div class="empty-state" style="padding:20px;"><i class="ti ti-alert-circle"></i> ${escapeHtml(resB.reason.message)}</div>`;
 
     panel.innerHTML = `
-      <div class="section-label">${escapeHtml(teamMatch.name)} — promedio sobre ${avgData.matches_analyzed} partidos recientes${
-        isNationalTeamTab
-          ? (avgData.leagues_used && avgData.leagues_used.length > 1 ? ' (varias competiciones)' : '')
-          : ` (liga api-sports.io #${leagueId})`
-      }</div>
-
-      <div class="stat-grid">
-        <div class="stat-box"><div class="label">Remates totales</div><div class="value amber">${a.shots_total ?? '—'}</div></div>
-        <div class="stat-box"><div class="label">Remates al arco</div><div class="value">${a.shots_on_goal ?? '—'}</div></div>
-        <div class="stat-box"><div class="label">Corners</div><div class="value grass">${a.corners ?? '—'}</div></div>
-        <div class="stat-box"><div class="label">Faltas</div><div class="value">${a.fouls ?? '—'}</div></div>
-        <div class="stat-box"><div class="label">Tarjetas amarillas</div><div class="value" style="color:var(--card-yellow)">${a.yellow_cards ?? '—'}</div></div>
-        <div class="stat-box"><div class="label">Tarjetas rojas</div><div class="value red">${a.red_cards ?? 0}</div></div>
-      </div>
-
-      <div class="section-label">Calidad de juego (avanzado)</div>
-      <div class="stat-grid">
-        <div class="stat-box"><div class="label">Goles esperados (xG)</div><div class="value amber">${a.expected_goals ?? '—'}</div></div>
-        <div class="stat-box"><div class="label">Posesión</div><div class="value">${a.possession_pct != null ? a.possession_pct + '%' : '—'}</div></div>
-        <div class="stat-box"><div class="label">Remates en zona de área</div><div class="value grass">${a.shots_inside_box ?? '—'}</div></div>
-        <div class="stat-box"><div class="label">Remates de media/larga distancia</div><div class="value">${a.shots_outside_box ?? '—'}</div></div>
-        <div class="stat-box"><div class="label">Fueras de juego</div><div class="value">${a.offsides ?? '—'}</div></div>
-      </div>
-      <div class="sub" style="font-size:11px;color:var(--chalk-faint);margin:-4px 0 8px;font-family:'JetBrains Mono',monospace;">
-        Goles esperados (xG): qué tan buenas fueron las ocasiones generadas, más allá de si terminaron en gol. Un xG bien por encima de los goles reales suele indicar mala definición o mala suerte; bien por debajo, eficacia.
-        "Zona de área" y "media/larga distancia" son por UBICACIÓN del remate en la cancha, no por resultado — un remate dentro del área puede terminar atajado, desviado, bloqueado o gol igual.
-      </div>
-
-      <div class="section-label">Remates a puerta vs. por fuera</div>
-      <div class="stat-grid">
-        <div class="stat-box"><div class="label">Remates a puerta (entre los 3 palos, atajado o gol)</div><div class="value amber">${a.shots_on_goal ?? '—'}</div></div>
-        <div class="stat-box"><div class="label">Remates por fuera (no entran a los 3 palos)</div><div class="value red">${a.shots_off_goal ?? '—'}</div></div>
-      </div>
-      <div class="sub" style="font-size:11px;color:var(--chalk-faint);margin:-4px 0 8px;font-family:'JetBrains Mono',monospace;">
-        Los remates bloqueados por un defensor antes de llegar al arco no cuentan en ninguna de las dos columnas (no llegaron a definirse como "a puerta" ni "por fuera").
-      </div>
-      <table>
-        <thead><tr>
-          <th>Fecha</th><th>Rival</th>${isNationalTeamTab ? '<th>Competición</th>' : ''}
-          <th class="num">A puerta</th><th class="num">Por fuera</th>
-        </tr></thead>
-        <tbody>${avgData.per_match_detail.map(m => `
-          <tr>
-            <td>${escapeHtml(m.date)}</td>
-            <td>${escapeHtml(m.opponent)}</td>
-            ${isNationalTeamTab ? `<td>${escapeHtml(LEAGUE_NAME_BY_ID[m.league_id] || ('#' + m.league_id))}</td>` : ''}
-            <td class="num">${m.shots_on_goal ?? '—'}</td>
-            <td class="num">${m.shots_off_goal ?? '—'}</td>
-          </tr>`).join('')}</tbody>
-      </table>
-
-      ${avgData.top_shooters && avgData.top_shooters.length ? `
-      <div class="section-label">Máximos rematadores (sobre los partidos analizados)</div>
-      <table>
-        <thead><tr>
-          <th></th><th>Jugador</th><th class="num">Remates</th><th class="num">Al arco</th><th class="num">Partidos</th>
-        </tr></thead>
-        <tbody>${avgData.top_shooters.map((p, i) => `
-          <tr>
-            <td class="num" style="color:var(--chalk-faint)">${i + 1}</td>
-            <td><div class="pos-cell">
-              ${p.photo ? `<img class="crest" src="${escapeHtml(p.photo)}" loading="lazy" onerror="this.style.display='none'" style="border-radius:50%;"/>` : ''}
-              <span class="team-name">${escapeHtml(p.name)}</span>
-            </div></td>
-            <td class="num" style="color:var(--amber);font-weight:600;">${p.shots_total}</td>
-            <td class="num">${p.shots_on_goal}</td>
-            <td class="num" style="color:var(--chalk-faint)">${p.matches}</td>
-          </tr>`).join('')}</tbody>
-      </table>
-      <div style="font-size:11px;color:var(--chalk-faint);font-family:'JetBrains Mono',monospace;margin:-4px 0 8px;">
-        La API no desglosa remates dentro/fuera del área por jugador, solo a nivel equipo (ver arriba).
-      </div>
-      ` : ''}
-
-      <div class="section-label">Detalle por partido</div>
-      <table>
-        <thead><tr>
-          <th>Fecha</th><th>Rival</th>${isNationalTeamTab ? '<th>Competición</th>' : ''}<th class="num">Remates</th><th class="num">Al arco</th>
-          <th class="num">xG</th><th class="num">Posesión</th>
-          <th class="num">Corners</th><th class="num">Faltas</th><th class="num">Am.</th><th class="num">Roj.</th>
-        </tr></thead>
-        <tbody>${avgData.per_match_detail.map(m => `
-          <tr>
-            <td>${escapeHtml(m.date)}</td>
-            <td>${escapeHtml(m.opponent)}</td>
-            ${isNationalTeamTab ? `<td>${escapeHtml(LEAGUE_NAME_BY_ID[m.league_id] || ('#' + m.league_id))}</td>` : ''}
-            <td class="num">${m.shots_total ?? '—'}</td>
-            <td class="num">${m.shots_on_goal ?? '—'}</td>
-            <td class="num">${m.expected_goals ?? '—'}</td>
-            <td class="num">${m.possession_pct != null ? m.possession_pct + '%' : '—'}</td>
-            <td class="num">${m.corners ?? '—'}</td>
-            <td class="num">${m.fouls ?? '—'}</td>
-            <td class="num">${m.yellow_cards ?? '—'}</td>
-            <td class="num">${m.red_cards ?? 0}</td>
-          </tr>`).join('')}</tbody>
-      </table>`;
+      <div class="compare-grid">
+        <div class="compare-col">${colA}</div>
+        <div class="compare-col">${colB}</div>
+      </div>`;
   } catch (err) {
     panel.innerHTML = errorBox('No se pudieron cargar las estadísticas avanzadas', err.message);
   }
@@ -1117,11 +1131,6 @@ async function loadFriendlies() {
   }
 }
 
-init();
-</script>
-
-
-</body></html>
 init();
 </script>
 

@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_3.html -->
+<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_4.html -->
 <html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pizarra — Análisis de fútbol</title>
 <link rel="preconnect" href="https://fonts.googleapis.com/">
-<link href="./index_3_files/css2" rel="stylesheet">
+<link href="./index_4_files/css2" rel="stylesheet">
 <style>
 :root{
   --field-night:#FAFAF7;
@@ -797,10 +797,24 @@ async function loadAdvanced(code) {
         <div class="stat-box"><div class="label">Tarjetas rojas</div><div class="value red">${a.red_cards ?? 0}</div></div>
       </div>
 
+      <div class="section-label">Calidad de juego (avanzado)</div>
+      <div class="stat-grid">
+        <div class="stat-box"><div class="label">Goles esperados (xG)</div><div class="value amber">${a.expected_goals ?? '—'}</div></div>
+        <div class="stat-box"><div class="label">Posesión</div><div class="value">${a.possession_pct != null ? a.possession_pct + '%' : '—'}</div></div>
+        <div class="stat-box"><div class="label">Remates dentro del área</div><div class="value grass">${a.shots_inside_box ?? '—'}</div></div>
+        <div class="stat-box"><div class="label">Remates fuera del área</div><div class="value">${a.shots_outside_box ?? '—'}</div></div>
+        <div class="stat-box"><div class="label">Atajadas del arquero</div><div class="value">${a.goalkeeper_saves ?? '—'}</div></div>
+        <div class="stat-box"><div class="label">Fueras de juego</div><div class="value">${a.offsides ?? '—'}</div></div>
+      </div>
+      <div class="sub" style="font-size:11px;color:var(--chalk-faint);margin:-4px 0 8px;font-family:'JetBrains Mono',monospace;">
+        Goles esperados (xG): qué tan buenas fueron las ocasiones generadas, más allá de si terminaron en gol. Un xG bien por encima de los goles reales suele indicar mala definición o mala suerte; bien por debajo, eficacia.
+      </div>
+
       <div class="section-label">Detalle por partido</div>
       <table>
         <thead><tr>
           <th>Fecha</th><th>Rival</th>${isNationalTeamTab ? '<th>Competición</th>' : ''}<th class="num">Remates</th><th class="num">Al arco</th>
+          <th class="num">xG</th><th class="num">Posesión</th>
           <th class="num">Corners</th><th class="num">Faltas</th><th class="num">Am.</th><th class="num">Roj.</th>
         </tr></thead>
         <tbody>${avgData.per_match_detail.map(m => `
@@ -810,6 +824,8 @@ async function loadAdvanced(code) {
             ${isNationalTeamTab ? `<td>${escapeHtml(LEAGUE_NAME_BY_ID[m.league_id] || ('#' + m.league_id))}</td>` : ''}
             <td class="num">${m.shots_total ?? '—'}</td>
             <td class="num">${m.shots_on_goal ?? '—'}</td>
+            <td class="num">${m.expected_goals ?? '—'}</td>
+            <td class="num">${m.possession_pct != null ? m.possession_pct + '%' : '—'}</td>
             <td class="num">${m.corners ?? '—'}</td>
             <td class="num">${m.fouls ?? '—'}</td>
             <td class="num">${m.yellow_cards ?? '—'}</td>

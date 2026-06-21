@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_6.html -->
+<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_7.html -->
 <html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pizarra — Análisis de fútbol</title>
 <link rel="preconnect" href="https://fonts.googleapis.com/">
-<link href="./index_6_files/css2" rel="stylesheet">
+<link href="./index_7_files/css2" rel="stylesheet">
 <style>
 :root{
   --field-night:#FAFAF7;
@@ -233,6 +233,9 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--field-line);f
     <input class="field-input" id="teamInput" placeholder="Nombre del equipo (ej: Arsenal)">
     <input class="field-input" id="team2Input" placeholder="Rival (solo para Cara a cara, ej: Chelsea)" style="display:none;">
     <select class="field-select" id="confedSelect" style="display:none;"><option value="south_america">CONMEBOL (Sudamérica)</option><option value="europe">UEFA (Europa)</option><option value="africa">CAF (África)</option><option value="asia">AFC (Asia)</option><option value="concacaf">CONCACAF (Norte/Centroamérica y Caribe)</option><option value="oceania">OFC (Oceanía)</option></select>
+    <select class="field-select" id="trendsCompFilter" style="display:none;">
+      <option value="">Todas las competiciones</option>
+    </select>
     <button class="btn" id="loadBtn">Cargar</button>
     <button class="btn ghost" id="backendUrlBtn" title="Cambiar URL del backend">backend</button>
   </div>
@@ -275,6 +278,7 @@ const competitionSelect = document.getElementById('competitionSelect');
 const teamInput = document.getElementById('teamInput');
 const team2Input = document.getElementById('team2Input');
 const confedSelect = document.getElementById('confedSelect');
+const trendsCompFilter = document.getElementById('trendsCompFilter');
 const loadBtn = document.getElementById('loadBtn');
 const connDot = document.getElementById('connDot');
 const connText = document.getElementById('connText');
@@ -376,15 +380,46 @@ function translateTeamSearch(name) {
   return translated || name;
 }
 
+// IDs de liga en api-sports.io para selecciones/copas, y candidatos a
+// consultar cuando se trata de una selección nacional (Mundial, Eurocopa,
+// las 6 eliminatorias continentales, y amistosos). Compartido entre
+// loadTrends (tendencias de goles) y loadAdvanced (remates/tarjetas) para
+// no duplicar el mismo mapeo dos veces.
+const APISPORTS_LEAGUE_ID_BY_CODE = { WC: 1, EC: 4, CL: 2, CLI: 13 };
+const LEAGUE_NAME_BY_ID = {
+  1: 'Mundial',
+  4: 'Eurocopa',
+  2: 'Champions League',
+  13: 'Libertadores',
+  32: 'Elim. Europa',
+  34: 'Elim. Sudamérica',
+  29: 'Elim. África',
+  30: 'Elim. Asia',
+  31: 'Elim. CONCACAF',
+  33: 'Elim. Oceanía',
+  10: 'Amistoso',
+};
+const NATIONAL_TEAM_LEAGUE_CANDIDATES = [
+  1,   // FIFA World Cup
+  4,   // Euro Championship
+  32,  // Eliminatoria UEFA (Europa)
+  34,  // Eliminatoria CONMEBOL (Sudamérica)
+  29,  // Eliminatoria CAF (África)
+  30,  // Eliminatoria AFC (Asia)
+  31,  // Eliminatoria CONCACAF
+  33,  // Eliminatoria OFC (Oceanía)
+  10,  // Amistosos internacionales
+];
+
 const TABS_NEEDING = {
-  standings: { competition: true, team: false, team2: false, confed: false },
-  matches: { competition: true, team: false, team2: false, confed: false },
-  trends: { competition: true, team: true, team2: false, confed: false },
-  h2h: { competition: true, team: true, team2: true, confed: false },
-  advanced: { competition: true, team: true, team2: false, confed: false },
-  knockout: { competition: true, team: false, team2: false, confed: false },
-  qualifiers: { competition: false, team: false, team2: false, confed: true },
-  friendlies: { competition: false, team: true, team2: false, confed: false },
+  standings: { competition: true, team: false, team2: false, confed: false, trendsFilter: false },
+  matches: { competition: true, team: false, team2: false, confed: false, trendsFilter: false },
+  trends: { competition: true, team: true, team2: false, confed: false, trendsFilter: true },
+  h2h: { competition: true, team: true, team2: true, confed: false, trendsFilter: false },
+  advanced: { competition: true, team: true, team2: false, confed: false, trendsFilter: false },
+  knockout: { competition: true, team: false, team2: false, confed: false, trendsFilter: false },
+  qualifiers: { competition: false, team: false, team2: false, confed: true, trendsFilter: false },
+  friendlies: { competition: false, team: true, team2: false, confed: false, trendsFilter: false },
 };
 
 function updateControlsVisibility() {
@@ -393,6 +428,7 @@ function updateControlsVisibility() {
   teamInput.style.display = need.team ? '' : 'none';
   team2Input.style.display = need.team2 ? '' : 'none';
   confedSelect.style.display = need.confed ? '' : 'none';
+  trendsCompFilter.style.display = need.trendsFilter ? '' : 'none';
   teamInput.placeholder = currentTab === 'friendlies'
     ? 'Selección (ej: Argentina) — vacío trae las más recientes'
     : 'Nombre del equipo (ej: Arsenal)';
@@ -423,6 +459,7 @@ document.querySelectorAll('.tab').forEach(tab => {
 loadBtn.addEventListener('click', loadCurrentTab);
 teamInput.addEventListener('keydown', e => { if (e.key === 'Enter') loadCurrentTab(); });
 team2Input.addEventListener('keydown', e => { if (e.key === 'Enter') loadCurrentTab(); });
+trendsCompFilter.addEventListener('change', () => loadCurrentTab());
 
 async function apiFetch(path) {
   const res = await fetch(BACKEND_URL + path);
@@ -600,12 +637,59 @@ async function loadTrends(code) {
     panel.innerHTML = `<div class="empty-state"><i class="ti ti-search"></i>Escribí el nombre de un equipo arriba (ej: Arsenal) y tocá "Cargar".</div>`;
     return;
   }
+  const isNationalTeamTrends = ['WC', 'EC', 'CL', 'CLI'].includes(code);
+  const filterValue = trendsCompFilter.value;
+
   panel.innerHTML = loadingBox('calculando tendencias de ' + team + '...');
   try {
-    const data = await apiFetch('/api/team-trends/' + code + '?team=' + encodeURIComponent(translateTeamSearch(team)) + '&last_n=20');
+    let data;
+    if (isNationalTeamTrends) {
+      // Selecciones: football-data.org no tiene eliminatorias ni
+      // amistosos cargados, así que usamos el motor de api-sports.io que
+      // junta Mundial + Eurocopa + las 6 eliminatorias + amistosos.
+      const teamSearch = await apiFetch('/api/apisports/search-team?name=' + encodeURIComponent(translateTeamSearch(team)));
+      const pool = teamSearch.results.filter(t => t.national);
+      const exactMatches = pool.filter(t => t.name.toLowerCase() === team.toLowerCase());
+      const teamMatch = exactMatches[0] || pool[0] || teamSearch.results[0];
+      if (!teamMatch) {
+        panel.innerHTML = errorBox('Equipo no encontrado', `No hay coincidencias para "${team}".`);
+        return;
+      }
+      let url = '/api/team-trends-multi/' + teamMatch.id +
+        '?league_ids=' + NATIONAL_TEAM_LEAGUE_CANDIDATES.join(',') + '&last_n=10';
+      if (filterValue) url += '&league_id_filter=' + filterValue;
+      data = await apiFetch(url);
+    } else {
+      // Clubes: football-data.org sí resuelve esto bien con un solo
+      // equipo, juntando automáticamente todas sus competiciones (liga +
+      // copas continentales) vía /teams/{id}/matches.
+      let url = '/api/team-trends/' + code + '?team=' + encodeURIComponent(translateTeamSearch(team)) + '&last_n=10';
+      if (filterValue) url += '&competition=' + filterValue;
+      data = await apiFetch(url);
+    }
+
+    // Poblar el selector de filtro con las competiciones que aparecieron
+    // en este resultado, conservando la selección actual si sigue siendo válida.
+    const compsPresent = isNationalTeamTrends
+      ? (data.leagues_used || [])
+      : (data.competitions_in_sample || []);
+    const prevValue = trendsCompFilter.value;
+    trendsCompFilter.innerHTML = '<option value="">Todas las competiciones</option>';
+    compsPresent.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = String(c);
+      opt.textContent = isNationalTeamTrends ? (LEAGUE_NAME_BY_ID[c] || ('#' + c)) : c;
+      trendsCompFilter.appendChild(opt);
+    });
+    if (compsPresent.map(String).includes(prevValue)) trendsCompFilter.value = prevValue;
+
     const isOver = data.tendency_over_2_5_team_goals.startsWith('Sí');
+    const compsLabel = isNationalTeamTrends
+      ? (data.leagues_used || []).map(c => LEAGUE_NAME_BY_ID[c] || ('#' + c)).join(', ')
+      : (data.competitions_in_sample || []).join(', ');
+
     panel.innerHTML = `
-      <div class="section-label">${escapeHtml(data.team_matched)} — últimos ${data.sample_size} partidos en ${escapeHtml(code)}</div>
+      <div class="section-label">${escapeHtml(data.team_matched)} — últimos ${data.sample_size} partidos${compsLabel ? ' (' + escapeHtml(compsLabel) + ')' : ''}</div>
 
       <div class="stat-grid">
         <div class="stat-box">
@@ -687,9 +771,12 @@ async function loadTrends(code) {
         let res = 'D';
         if (m.goalsFor > m.goalsAgainst) res = 'W';
         else if (m.goalsFor < m.goalsAgainst) res = 'L';
+        const compTag = isNationalTeamTrends
+          ? (LEAGUE_NAME_BY_ID[m.league_id] || ('#' + m.league_id))
+          : (m.competition || '');
         return `<div class="recent-item">
           <span class="res ${res}">${res}</span>
-          <span>${escapeHtml(m.venue === 'local' ? 'vs' : '@')} ${escapeHtml(m.opponent)}</span>
+          <span>${escapeHtml(m.venue === 'local' ? 'vs' : '@')} ${escapeHtml(m.opponent)}${compTag ? ' · ' + escapeHtml(compTag) : ''}</span>
           <span style="text-align:right">${m.goalsFor}-${m.goalsAgainst}</span>
         </div>`;
       }).join('')}</div>`;
@@ -736,31 +823,6 @@ async function loadAdvanced(code) {
     // importar de cuál de ellas vienen — porque el partido más nuevo de
     // una selección puede ser un amistoso o un partido del torneo final,
     // mientras el grueso de su historial está en la eliminatoria.
-    const APISPORTS_LEAGUE_ID_BY_CODE = { WC: 1, EC: 4, CL: 2, CLI: 13 };
-    const LEAGUE_NAME_BY_ID = {
-      1: 'Mundial',
-      4: 'Eurocopa',
-      2: 'Champions League',
-      13: 'Libertadores',
-      32: 'Elim. Europa',
-      34: 'Elim. Sudamérica',
-      29: 'Elim. África',
-      30: 'Elim. Asia',
-      31: 'Elim. CONCACAF',
-      33: 'Elim. Oceanía',
-      10: 'Amistoso',
-    };
-    const NATIONAL_TEAM_LEAGUE_CANDIDATES = [
-      1,   // FIFA World Cup
-      4,   // Euro Championship
-      32,  // Eliminatoria UEFA (Europa)
-      34,  // Eliminatoria CONMEBOL (Sudamérica)
-      29,  // Eliminatoria CAF (África)
-      30,  // Eliminatoria AFC (Asia)
-      31,  // Eliminatoria CONCACAF
-      33,  // Eliminatoria OFC (Oceanía)
-      10,  // Amistosos internacionales
-    ];
 
     let leagueId = null;
     let avgData = null;

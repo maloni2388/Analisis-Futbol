@@ -646,12 +646,18 @@ def team_match_stats_avg(league_id, team_id):
     """
     Promedio de remates, corners, tarjetas y faltas por partido de un equipo,
     calculado iterando sus últimos N fixtures finalizados y promediando.
-    api-sports.io no ofrece esto agregado directamente, así que lo armamos
-    nosotros combinando /fixtures (para encontrar los partidos) +
-    /fixtures/statistics (para las stats de cada uno).
+    También arma un ranking de los 5 jugadores con más remates (total y al
+    arco) sumados en esos mismos partidos — la API no desglosa remates
+    dentro/fuera del área a nivel individual, solo a nivel equipo.
 
-    OJO: consume 1 request de cuota por cada partido analizado, además de
-    la búsqueda inicial de fixtures. Con last_n=10 son ~11 requests.
+    api-sports.io no ofrece nada de esto agregado directamente, así que lo
+    armamos nosotros combinando /fixtures (para encontrar los partidos) +
+    /fixtures/statistics (stats de equipo) + /fixtures/players (stats
+    individuales) por cada partido.
+
+    OJO: consume 2 requests de cuota por cada partido analizado (stats de
+    equipo + stats de jugadores), además de la búsqueda inicial de
+    fixtures. Con last_n=10 son ~21 requests.
 
     Ejemplo: /api/team-match-stats-avg/39/42?last_n=10
     """
@@ -673,6 +679,7 @@ def team_match_stats_avg(league_id, team_id):
     totals = defaultdict(float)
     counts = defaultdict(int)
     per_match = []
+    player_shots = defaultdict(lambda: {"shots_total": 0, "shots_on_goal": 0, "matches": 0, "name": "", "photo": None})
 
     for fx in fixtures:
         fixture_id = fx["fixture"]["id"]
@@ -732,6 +739,30 @@ def team_match_stats_avg(league_id, team_id):
                 **row,
             })
 
+        # Remates por jugador en este mismo partido. api-sports.io no
+        # desglosa dentro/fuera del área a nivel individual (solo a nivel
+        # equipo, ya capturado arriba) — acá solo hay remates totales y al
+        # arco por jugador.
+        players_data, err3 = fetch_apisports("/fixtures/players", params={"fixture": fixture_id})
+        if not err3:
+            for block in players_data.get("response", []):
+                if block["team"]["id"] != team_id:
+                    continue
+                for p in block.get("players", []):
+                    pstats = p["statistics"][0] if p.get("statistics") else {}
+                    shots = pstats.get("shots") or {}
+                    s_total = shots.get("total")
+                    s_on = shots.get("on")
+                    if s_total is None and s_on is None:
+                        continue  # jugador sin minutos relevantes o sin datos de remates
+                    pid = p["player"]["id"]
+                    entry = player_shots[pid]
+                    entry["name"] = p["player"]["name"]
+                    entry["photo"] = p["player"].get("photo")
+                    entry["shots_total"] += s_total or 0
+                    entry["shots_on_goal"] += s_on or 0
+                    entry["matches"] += 1
+
     if not per_match:
         return jsonify({
             "error": "No se pudieron obtener estadísticas detalladas para ningún partido (puede que esta liga/temporada no tenga datos de fixtures/statistics disponibles)."
@@ -747,12 +778,17 @@ def team_match_stats_avg(league_id, team_id):
         for key in AVG_KEYS
     }
 
+    top_shooters = sorted(
+        player_shots.values(), key=lambda p: (p["shots_total"], p["shots_on_goal"]), reverse=True
+    )[:5]
+
     result = {
         "league_id": league_id,
         "team_id": team_id,
         "matches_analyzed": len(per_match),
         "averages_per_match": averages,
         "per_match_detail": per_match,
+        "top_shooters": top_shooters,
     }
     return jsonify(result)
 
@@ -820,6 +856,7 @@ def team_match_stats_multi(team_id):
     counts = defaultdict(int)
     per_match = []
     leagues_used = set()
+    player_shots = defaultdict(lambda: {"shots_total": 0, "shots_on_goal": 0, "matches": 0, "name": "", "photo": None})
 
     for lg_id, fx in selected:
         fixture_id = fx["fixture"]["id"]
@@ -879,6 +916,27 @@ def team_match_stats_multi(team_id):
                 **row,
             })
 
+        # Remates por jugador, mismo criterio que team_match_stats_avg.
+        players_data, err4 = fetch_apisports("/fixtures/players", params={"fixture": fixture_id})
+        if not err4:
+            for block in players_data.get("response", []):
+                if block["team"]["id"] != team_id:
+                    continue
+                for p in block.get("players", []):
+                    pstats = p["statistics"][0] if p.get("statistics") else {}
+                    shots = pstats.get("shots") or {}
+                    s_total = shots.get("total")
+                    s_on = shots.get("on")
+                    if s_total is None and s_on is None:
+                        continue
+                    pid = p["player"]["id"]
+                    entry = player_shots[pid]
+                    entry["name"] = p["player"]["name"]
+                    entry["photo"] = p["player"].get("photo")
+                    entry["shots_total"] += s_total or 0
+                    entry["shots_on_goal"] += s_on or 0
+                    entry["matches"] += 1
+
     if not per_match:
         return jsonify({
             "error": "No se pudieron obtener estadísticas detalladas para ninguno de los partidos más recientes encontrados."
@@ -894,6 +952,10 @@ def team_match_stats_multi(team_id):
         for key in AVG_KEYS
     }
 
+    top_shooters = sorted(
+        player_shots.values(), key=lambda p: (p["shots_total"], p["shots_on_goal"]), reverse=True
+    )[:5]
+
     result = {
         "team_id": team_id,
         "leagues_searched": league_ids,
@@ -901,5 +963,7 @@ def team_match_stats_multi(team_id):
         "matches_analyzed": len(per_match),
         "averages_per_match": averages,
         "per_match_detail": per_match,
+        "top_shooters": top_shooters,
     }
     return jsonify(result)
+

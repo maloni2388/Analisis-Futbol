@@ -237,6 +237,111 @@ def _fetch_fd_team_matches(team_id, max_n, competition_filter=None):
     return matches[:max_n], None
 
 
+def _compute_fd_trends_from_matches(team_matches, team_id):
+    """
+    Calcula goles a favor/contra, BTTS, clean sheets, récord y goles por
+    mitad a partir de una lista de partidos de football-data.org ya
+    filtrada (no vuelve a buscar nada). Separado de team_trends() para
+    poder reusarlo calculando distintas ventanas de la misma lista de
+    partidos (ej: últimos 5 vs últimos 20) sin pedir nada dos veces a la
+    API ni duplicar el cálculo.
+    """
+    scored = []
+    conceded = []
+    over_25_scored = 0
+    over_15_scored = 0
+    clean_sheets = 0
+    failed_to_score = 0
+    ht_goals_scored = []
+    st_goals_scored = []
+    ht_goals_conceded = []
+    st_goals_conceded = []
+    btts = 0
+    wins = draws = losses = 0
+    sample = []
+
+    for m in team_matches:
+        is_home = m["homeTeam"]["id"] == team_id
+        gf = m["score"]["fullTime"]["home"] if is_home else m["score"]["fullTime"]["away"]
+        ga = m["score"]["fullTime"]["away"] if is_home else m["score"]["fullTime"]["home"]
+        ht_gf = m["score"]["halfTime"]["home"] if is_home else m["score"]["halfTime"]["away"]
+        ht_ga = m["score"]["halfTime"]["away"] if is_home else m["score"]["halfTime"]["home"]
+
+        scored.append(gf)
+        conceded.append(ga)
+
+        if gf >= 3:
+            over_25_scored += 1
+        if gf >= 2:
+            over_15_scored += 1
+        if ga == 0:
+            clean_sheets += 1
+        if gf == 0:
+            failed_to_score += 1
+        if gf > 0 and ga > 0:
+            btts += 1
+
+        ht_goals_scored.append(ht_gf if ht_gf is not None else 0)
+        st_goals_scored.append((gf - ht_gf) if ht_gf is not None else None)
+        ht_goals_conceded.append(ht_ga if ht_ga is not None else 0)
+        st_goals_conceded.append((ga - ht_ga) if ht_ga is not None else None)
+
+        winner = m["score"]["winner"]
+        if winner == "DRAW":
+            draws += 1
+        elif (winner == "HOME_TEAM" and is_home) or (winner == "AWAY_TEAM" and not is_home):
+            wins += 1
+        elif winner is not None:
+            losses += 1
+
+        opponent = m["awayTeam"]["name"] if is_home else m["homeTeam"]["name"]
+        sample.append({
+            "date": m["utcDate"][:10],
+            "venue": "local" if is_home else "visitante",
+            "opponent": opponent,
+            "goalsFor": gf,
+            "goalsAgainst": ga,
+            "competition": m["competition"]["code"],
+        })
+
+    n = len(team_matches)
+    valid_st = [g for g in st_goals_scored if g is not None]
+    valid_st_conceded = [g for g in st_goals_conceded if g is not None]
+
+    return {
+        "sample_size": n,
+        "record": {"won": wins, "draw": draws, "lost": losses},
+        "goals_for": {
+            "avg_per_match": round(sum(scored) / n, 2),
+            "matches_with_2plus_goals": over_15_scored,
+            "matches_with_2plus_goals_pct": round(over_15_scored / n * 100, 1),
+            "matches_with_3plus_goals": over_25_scored,
+            "matches_with_3plus_goals_pct": round(over_25_scored / n * 100, 1),
+            "failed_to_score_count": failed_to_score,
+            "failed_to_score_pct": round(failed_to_score / n * 100, 1),
+        },
+        "goals_against": {
+            "avg_per_match": round(sum(conceded) / n, 2),
+            "clean_sheets": clean_sheets,
+            "clean_sheets_pct": round(clean_sheets / n * 100, 1),
+        },
+        "btts_pct": round(btts / n * 100, 1),
+        "goals_by_half": {
+            "avg_first_half": round(sum(ht_goals_scored) / n, 2),
+            "avg_second_half": round(sum(valid_st) / len(valid_st), 2) if valid_st else None,
+            "avg_first_half_conceded": round(sum(ht_goals_conceded) / n, 2),
+            "avg_second_half_conceded": round(sum(valid_st_conceded) / len(valid_st_conceded), 2) if valid_st_conceded else None,
+            "note": "Promedio de goles propios y del rival, anotados/recibidos en cada mitad.",
+        },
+        "tendency_over_2_5_team_goals": (
+            "Sí, suele superar 2.5 goles propios por partido"
+            if (sum(scored) / n) > 2.5 else
+            "No, normalmente anota 2.5 goles propios o menos por partido"
+        ),
+        "recent_matches": sample,
+    }
+
+
 @extra_bp.route("/api/team-trends/<code>", methods=["GET"])
 def team_trends(code):
 
@@ -291,104 +396,41 @@ def team_trends(code):
     competitions_in_sample = sorted(set(m["competition"]["code"] for m in team_matches))
     team_name = team_full_name  # para que el resto de la función (y la respuesta) use el nombre completo real
 
-    scored = []      # goles anotados por el equipo, partido a partido
-    conceded = []     # goles recibidos
-    over_25_scored = 0   # partidos donde el EQUIPO metió 3+ goles
-    over_15_scored = 0   # partidos donde el equipo metió 2+ goles
-    clean_sheets = 0      # partidos sin recibir goles
-    failed_to_score = 0   # partidos sin anotar
-    ht_goals_scored = []
-    st_goals_scored = []  # goles del equipo en el segundo tiempo (fulltime - halftime)
-    ht_goals_conceded = []
-    st_goals_conceded = []  # goles recibidos en el segundo tiempo
-    btts = 0
-    wins = draws = losses = 0
-    sample = []
+    result = _compute_fd_trends_from_matches(team_matches, team_id)
+    result["competition_code"] = code
+    result["competition_filter_applied"] = competition_filter
+    result["competitions_in_sample"] = competitions_in_sample
+    result["team_matched"] = team_name
 
-    for m in team_matches:
-        is_home = m["homeTeam"]["id"] == team_id
-        gf = m["score"]["fullTime"]["home"] if is_home else m["score"]["fullTime"]["away"]
-        ga = m["score"]["fullTime"]["away"] if is_home else m["score"]["fullTime"]["home"]
-        ht_gf = m["score"]["halfTime"]["home"] if is_home else m["score"]["halfTime"]["away"]
-        ht_ga = m["score"]["halfTime"]["away"] if is_home else m["score"]["halfTime"]["home"]
+    # Comparación de forma reciente: últimos 5 partidos vs. los últimos 20
+    # (o lo que haya disponible), calculados sobre la MISMA lista de
+    # partidos ya traída — no pedimos nada extra a la API. Sirve para ver
+    # si un equipo está mejor o peor que su promedio "de fondo" últimamente.
+    # team_matches ya viene ordenado del más reciente al más viejo.
+    if len(team_matches) >= 5:
+        short_window = _compute_fd_trends_from_matches(team_matches[:5], team_id)
+        long_window = _compute_fd_trends_from_matches(team_matches, team_id)
+        result["form_comparison"] = {
+            "short_window_size": short_window["sample_size"],
+            "long_window_size": long_window["sample_size"],
+            "short_window": {
+                "goals_for_avg": short_window["goals_for"]["avg_per_match"],
+                "goals_against_avg": short_window["goals_against"]["avg_per_match"],
+                "record": short_window["record"],
+                "btts_pct": short_window["btts_pct"],
+                "clean_sheets_pct": short_window["goals_against"]["clean_sheets_pct"],
+            },
+            "long_window": {
+                "goals_for_avg": long_window["goals_for"]["avg_per_match"],
+                "goals_against_avg": long_window["goals_against"]["avg_per_match"],
+                "record": long_window["record"],
+                "btts_pct": long_window["btts_pct"],
+                "clean_sheets_pct": long_window["goals_against"]["clean_sheets_pct"],
+            },
+        }
+    else:
+        result["form_comparison"] = None
 
-        scored.append(gf)
-        conceded.append(ga)
-
-        if gf >= 3:
-            over_25_scored += 1
-        if gf >= 2:
-            over_15_scored += 1
-        if ga == 0:
-            clean_sheets += 1
-        if gf == 0:
-            failed_to_score += 1
-        if gf > 0 and ga > 0:
-            btts += 1
-
-        ht_goals_scored.append(ht_gf if ht_gf is not None else 0)
-        st_goals_scored.append((gf - ht_gf) if ht_gf is not None else None)
-        ht_goals_conceded.append(ht_ga if ht_ga is not None else 0)
-        st_goals_conceded.append((ga - ht_ga) if ht_ga is not None else None)
-
-        winner = m["score"]["winner"]
-        if winner == "DRAW":
-            draws += 1
-        elif (winner == "HOME_TEAM" and is_home) or (winner == "AWAY_TEAM" and not is_home):
-            wins += 1
-        elif winner is not None:
-            losses += 1
-
-        opponent = m["awayTeam"]["name"] if is_home else m["homeTeam"]["name"]
-        sample.append({
-            "date": m["utcDate"][:10],
-            "venue": "local" if is_home else "visitante",
-            "opponent": opponent,
-            "goalsFor": gf,
-            "goalsAgainst": ga,
-            "competition": m["competition"]["code"],
-        })
-
-    n = len(team_matches)
-    valid_st = [g for g in st_goals_scored if g is not None]
-    valid_st_conceded = [g for g in st_goals_conceded if g is not None]
-
-    result = {
-        "competition_code": code,
-        "competition_filter_applied": competition_filter,
-        "competitions_in_sample": competitions_in_sample,
-        "team_matched": team_name,
-        "sample_size": n,
-        "record": {"won": wins, "draw": draws, "lost": losses},
-        "goals_for": {
-            "avg_per_match": round(sum(scored) / n, 2),
-            "matches_with_2plus_goals": over_15_scored,
-            "matches_with_2plus_goals_pct": round(over_15_scored / n * 100, 1),
-            "matches_with_3plus_goals": over_25_scored,
-            "matches_with_3plus_goals_pct": round(over_25_scored / n * 100, 1),
-            "failed_to_score_count": failed_to_score,
-            "failed_to_score_pct": round(failed_to_score / n * 100, 1),
-        },
-        "goals_against": {
-            "avg_per_match": round(sum(conceded) / n, 2),
-            "clean_sheets": clean_sheets,
-            "clean_sheets_pct": round(clean_sheets / n * 100, 1),
-        },
-        "btts_pct": round(btts / n * 100, 1),
-        "goals_by_half": {
-            "avg_first_half": round(sum(ht_goals_scored) / n, 2),
-            "avg_second_half": round(sum(valid_st) / len(valid_st), 2) if valid_st else None,
-            "avg_first_half_conceded": round(sum(ht_goals_conceded) / n, 2),
-            "avg_second_half_conceded": round(sum(valid_st_conceded) / len(valid_st_conceded), 2) if valid_st_conceded else None,
-            "note": "Promedio de goles propios y del rival, anotados/recibidos en cada mitad.",
-        },
-        "tendency_over_2_5_team_goals": (
-            "Sí, suele superar 2.5 goles propios por partido"
-            if (sum(scored) / n) > 2.5 else
-            "No, normalmente anota 2.5 goles propios o menos por partido"
-        ),
-        "recent_matches": sample,
-    }
     return jsonify(result)
 
 
@@ -757,63 +799,74 @@ def team_match_stats_avg(league_id, team_id):
         if err2:
             continue  # si un partido puntual falla, seguimos con el resto
 
+        # Leer ambos bloques (propio y rival) en una sola pasada
+        own_stats = {}
+        opp_stats = {}
         for block in stats_data.get("response", []):
-            if block["team"]["id"] != team_id:
-                continue
-            stats = {item["type"]: item["value"] for item in block.get("statistics", [])}
+            blk_stats = {item["type"]: item["value"] for item in block.get("statistics", [])}
+            if block["team"]["id"] == team_id:
+                own_stats = blk_stats
+            else:
+                opp_stats = blk_stats
 
-            def num(key):
-                v = stats.get(key)
-                try:
-                    return float(v)
-                except (TypeError, ValueError):
-                    return None
+        if not own_stats:
+            continue  # partido sin bloque propio (raro, pero posible)
 
-            def pct(key):
-                # "Ball Possession" y "Passes %" vienen como string "60%",
-                # no como número — hay que sacar el símbolo antes de parsear.
-                v = stats.get(key)
-                if v is None:
-                    return None
-                try:
-                    return float(str(v).replace("%", ""))
-                except (TypeError, ValueError):
-                    return None
+        def num(key, src=own_stats):
+            v = src.get(key)
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
 
-            row = {
-                "shots_total": num("Total Shots"),
-                "shots_on_goal": num("Shots on Goal"),
-                "shots_off_goal": num("Shots off Goal"),
-                "shots_blocked": num("Blocked Shots"),
-                "shots_inside_box": num("Shots insidebox"),
-                "shots_outside_box": num("Shots outsidebox"),
-                "corners": num("Corner Kicks"),
-                "fouls": num("Fouls"),
-                "offsides": num("Offsides"),
-                "yellow_cards": num("Yellow Cards"),
-                "red_cards": num("Red Cards"),
-                "possession_pct": pct("Ball Possession"),
-                "goalkeeper_saves": num("Goalkeeper Saves"),
-                "expected_goals": num("expected_goals"),
-                "goals_prevented": num("goals_prevented"),
-            }
-            for key, val in row.items():
-                if val is not None:
-                    totals[key] += val
-                    counts[key] += 1
+        def pct(key):
+            # "Ball Possession" y "Passes %" vienen como string "60%",
+            # no como número — hay que sacar el símbolo antes de parsear.
+            v = own_stats.get(key)
+            if v is None:
+                return None
+            try:
+                return float(str(v).replace("%", ""))
+            except (TypeError, ValueError):
+                return None
 
-            per_match.append({
-                "date": fx["fixture"]["date"][:10],
-                "opponent": (
-                    fx["teams"]["away"]["name"] if fx["teams"]["home"]["id"] == team_id
-                    else fx["teams"]["home"]["name"]
-                ),
-                "goals_for": (
-                    fx["goals"]["home"] if fx["teams"]["home"]["id"] == team_id
-                    else fx["goals"]["away"]
-                ),
-                **row,
-            })
+        corners_against_val = num("Corner Kicks", opp_stats)
+
+        row = {
+            "shots_total": num("Total Shots"),
+            "shots_on_goal": num("Shots on Goal"),
+            "shots_off_goal": num("Shots off Goal"),
+            "shots_blocked": num("Blocked Shots"),
+            "shots_inside_box": num("Shots insidebox"),
+            "shots_outside_box": num("Shots outsidebox"),
+            "corners": num("Corner Kicks"),
+            "corners_against": corners_against_val,
+            "fouls": num("Fouls"),
+            "offsides": num("Offsides"),
+            "yellow_cards": num("Yellow Cards"),
+            "red_cards": num("Red Cards"),
+            "possession_pct": pct("Ball Possession"),
+            "goalkeeper_saves": num("Goalkeeper Saves"),
+            "expected_goals": num("expected_goals"),
+            "goals_prevented": num("goals_prevented"),
+        }
+        for key, val in row.items():
+            if val is not None:
+                totals[key] += val
+                counts[key] += 1
+
+        per_match.append({
+            "date": fx["fixture"]["date"][:10],
+            "opponent": (
+                fx["teams"]["away"]["name"] if fx["teams"]["home"]["id"] == team_id
+                else fx["teams"]["home"]["name"]
+            ),
+            "goals_for": (
+                fx["goals"]["home"] if fx["teams"]["home"]["id"] == team_id
+                else fx["goals"]["away"]
+            ),
+            **row,
+        })
 
         # Remates por jugador en este mismo partido. api-sports.io no
         # desglosa dentro/fuera del área a nivel individual (solo a nivel
@@ -847,7 +900,8 @@ def team_match_stats_avg(league_id, team_id):
     AVG_KEYS = [
         "shots_total", "shots_on_goal", "shots_off_goal", "shots_blocked",
         "shots_inside_box", "shots_outside_box",
-        "corners", "fouls", "offsides", "yellow_cards", "red_cards",
+        "corners", "corners_against",
+        "fouls", "offsides", "yellow_cards", "red_cards",
         "possession_pct", "goalkeeper_saves", "expected_goals", "goals_prevented",
     ]
     averages = {
@@ -855,9 +909,13 @@ def team_match_stats_avg(league_id, team_id):
         for key in AVG_KEYS
     }
 
-    top_shooters = sorted(
-        player_shots.values(), key=lambda p: (p["shots_total"], p["shots_on_goal"]), reverse=True
+    sorted_shooters = sorted(
+        player_shots.values(), key=lambda p: (p["shots_on_goal"] / max(p["matches"], 1), p["shots_on_goal"]), reverse=True
     )[:5]
+    top_shooters = [
+        {**p, "shots_on_goal_per_match": round(p["shots_on_goal"] / max(p["matches"], 1), 2)}
+        for p in sorted_shooters
+    ]
 
     result = {
         "league_id": league_id,
@@ -950,63 +1008,73 @@ def team_match_stats_multi(team_id):
         if err2:
             continue
 
+        own_stats = {}
+        opp_stats = {}
         for block in stats_data.get("response", []):
-            if block["team"]["id"] != team_id:
-                continue
-            stats = {item["type"]: item["value"] for item in block.get("statistics", [])}
+            blk_stats = {item["type"]: item["value"] for item in block.get("statistics", [])}
+            if block["team"]["id"] == team_id:
+                own_stats = blk_stats
+            else:
+                opp_stats = blk_stats
 
-            def num(key):
-                v = stats.get(key)
-                try:
-                    return float(v)
-                except (TypeError, ValueError):
-                    return None
+        if not own_stats:
+            continue
 
-            def pct(key):
-                v = stats.get(key)
-                if v is None:
-                    return None
-                try:
-                    return float(str(v).replace("%", ""))
-                except (TypeError, ValueError):
-                    return None
+        def num(key, src=own_stats):
+            v = src.get(key)
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
 
-            row = {
-                "shots_total": num("Total Shots"),
-                "shots_on_goal": num("Shots on Goal"),
-                "shots_off_goal": num("Shots off Goal"),
-                "shots_blocked": num("Blocked Shots"),
-                "shots_inside_box": num("Shots insidebox"),
-                "shots_outside_box": num("Shots outsidebox"),
-                "corners": num("Corner Kicks"),
-                "fouls": num("Fouls"),
-                "offsides": num("Offsides"),
-                "yellow_cards": num("Yellow Cards"),
-                "red_cards": num("Red Cards"),
-                "possession_pct": pct("Ball Possession"),
-                "goalkeeper_saves": num("Goalkeeper Saves"),
-                "expected_goals": num("expected_goals"),
-                "goals_prevented": num("goals_prevented"),
-            }
-            for key, val in row.items():
-                if val is not None:
-                    totals[key] += val
-                    counts[key] += 1
+        def pct(key):
+            v = own_stats.get(key)
+            if v is None:
+                return None
+            try:
+                return float(str(v).replace("%", ""))
+            except (TypeError, ValueError):
+                return None
 
-            leagues_used.add(lg_id)
-            per_match.append({
-                "date": fx["fixture"]["date"][:10],
-                "opponent": (
-                    fx["teams"]["away"]["name"] if fx["teams"]["home"]["id"] == team_id
-                    else fx["teams"]["home"]["name"]
-                ),
-                "goals_for": (
-                    fx["goals"]["home"] if fx["teams"]["home"]["id"] == team_id
-                    else fx["goals"]["away"]
-                ),
-                "league_id": lg_id,
-                **row,
-            })
+        corners_against_val = num("Corner Kicks", opp_stats)
+
+        row = {
+            "shots_total": num("Total Shots"),
+            "shots_on_goal": num("Shots on Goal"),
+            "shots_off_goal": num("Shots off Goal"),
+            "shots_blocked": num("Blocked Shots"),
+            "shots_inside_box": num("Shots insidebox"),
+            "shots_outside_box": num("Shots outsidebox"),
+            "corners": num("Corner Kicks"),
+            "corners_against": corners_against_val,
+            "fouls": num("Fouls"),
+            "offsides": num("Offsides"),
+            "yellow_cards": num("Yellow Cards"),
+            "red_cards": num("Red Cards"),
+            "possession_pct": pct("Ball Possession"),
+            "goalkeeper_saves": num("Goalkeeper Saves"),
+            "expected_goals": num("expected_goals"),
+            "goals_prevented": num("goals_prevented"),
+        }
+        for key, val in row.items():
+            if val is not None:
+                totals[key] += val
+                counts[key] += 1
+
+        leagues_used.add(lg_id)
+        per_match.append({
+            "date": fx["fixture"]["date"][:10],
+            "opponent": (
+                fx["teams"]["away"]["name"] if fx["teams"]["home"]["id"] == team_id
+                else fx["teams"]["home"]["name"]
+            ),
+            "goals_for": (
+                fx["goals"]["home"] if fx["teams"]["home"]["id"] == team_id
+                else fx["goals"]["away"]
+            ),
+            "league_id": lg_id,
+            **row,
+        })
 
         # Remates por jugador, mismo criterio que team_match_stats_avg.
         players_data, err4 = fetch_apisports("/fixtures/players", params={"fixture": fixture_id})
@@ -1037,7 +1105,8 @@ def team_match_stats_multi(team_id):
     AVG_KEYS = [
         "shots_total", "shots_on_goal", "shots_off_goal", "shots_blocked",
         "shots_inside_box", "shots_outside_box",
-        "corners", "fouls", "offsides", "yellow_cards", "red_cards",
+        "corners", "corners_against",
+        "fouls", "offsides", "yellow_cards", "red_cards",
         "possession_pct", "goalkeeper_saves", "expected_goals", "goals_prevented",
     ]
     averages = {
@@ -1045,9 +1114,13 @@ def team_match_stats_multi(team_id):
         for key in AVG_KEYS
     }
 
-    top_shooters = sorted(
-        player_shots.values(), key=lambda p: (p["shots_total"], p["shots_on_goal"]), reverse=True
+    sorted_shooters2 = sorted(
+        player_shots.values(), key=lambda p: (p["shots_on_goal"] / max(p["matches"], 1), p["shots_on_goal"]), reverse=True
     )[:5]
+    top_shooters = [
+        {**p, "shots_on_goal_per_match": round(p["shots_on_goal"] / max(p["matches"], 1), 2)}
+        for p in sorted_shooters2
+    ]
 
     result = {
         "team_id": team_id,
@@ -1059,6 +1132,119 @@ def team_match_stats_multi(team_id):
         "top_shooters": top_shooters,
     }
     return jsonify(result)
+
+
+def _compute_apisports_trends_from_fixtures(selected, team_id):
+    """
+    Misma idea que _compute_fd_trends_from_matches pero para fixtures de
+    api-sports.io (estructura distinta a football-data.org: selected es
+    una lista de tuplas (league_id, fixture)). Separado para poder
+    calcular distintas ventanas (ej: últimos 5 vs últimos 20) sobre la
+    misma lista ya traída.
+    """
+    scored = []
+    conceded = []
+    over_25_scored = 0
+    over_15_scored = 0
+    clean_sheets = 0
+    failed_to_score = 0
+    ht_goals_scored = []
+    st_goals_scored = []
+    ht_goals_conceded = []
+    st_goals_conceded = []
+    btts = 0
+    wins = draws = losses = 0
+    sample = []
+    leagues_used = set()
+
+    for lg_id, fx in selected:
+        is_home = fx["teams"]["home"]["id"] == team_id
+        gf = fx["goals"]["home"] if is_home else fx["goals"]["away"]
+        ga = fx["goals"]["away"] if is_home else fx["goals"]["home"]
+        if gf is None or ga is None:
+            continue
+
+        ht = fx.get("score", {}).get("halftime", {}) or {}
+        ht_gf = ht.get("home") if is_home else ht.get("away")
+        ht_ga = ht.get("away") if is_home else ht.get("home")
+
+        scored.append(gf)
+        conceded.append(ga)
+
+        if gf >= 3:
+            over_25_scored += 1
+        if gf >= 2:
+            over_15_scored += 1
+        if ga == 0:
+            clean_sheets += 1
+        if gf == 0:
+            failed_to_score += 1
+        if gf > 0 and ga > 0:
+            btts += 1
+
+        ht_goals_scored.append(ht_gf if ht_gf is not None else 0)
+        st_goals_scored.append((gf - ht_gf) if ht_gf is not None else None)
+        ht_goals_conceded.append(ht_ga if ht_ga is not None else 0)
+        st_goals_conceded.append((ga - ht_ga) if ht_ga is not None else None)
+
+        if gf > ga:
+            wins += 1
+        elif gf < ga:
+            losses += 1
+        else:
+            draws += 1
+
+        leagues_used.add(lg_id)
+        opponent = fx["teams"]["away"]["name"] if is_home else fx["teams"]["home"]["name"]
+        sample.append({
+            "date": fx["fixture"]["date"][:10],
+            "venue": "local" if is_home else "visitante",
+            "opponent": opponent,
+            "goalsFor": gf,
+            "goalsAgainst": ga,
+            "league_id": lg_id,
+        })
+
+    n = len(sample)
+    if n == 0:
+        return None
+
+    valid_st = [g for g in st_goals_scored if g is not None]
+    valid_st_conceded = [g for g in st_goals_conceded if g is not None]
+
+    return {
+        "leagues_used": sorted(leagues_used),
+        "sample_size": n,
+        "record": {"won": wins, "draw": draws, "lost": losses},
+        "goals_for": {
+            "avg_per_match": round(sum(scored) / n, 2),
+            "matches_with_2plus_goals": over_15_scored,
+            "matches_with_2plus_goals_pct": round(over_15_scored / n * 100, 1),
+            "matches_with_3plus_goals": over_25_scored,
+            "matches_with_3plus_goals_pct": round(over_25_scored / n * 100, 1),
+            "failed_to_score_count": failed_to_score,
+            "failed_to_score_pct": round(failed_to_score / n * 100, 1),
+        },
+        "goals_against": {
+            "avg_per_match": round(sum(conceded) / n, 2),
+            "clean_sheets": clean_sheets,
+            "clean_sheets_pct": round(clean_sheets / n * 100, 1),
+        },
+        "btts_pct": round(btts / n * 100, 1),
+        "goals_by_half": {
+            "avg_first_half": round(sum(ht_goals_scored) / n, 2),
+            "avg_second_half": round(sum(valid_st) / len(valid_st), 2) if valid_st else None,
+            "avg_first_half_conceded": round(sum(ht_goals_conceded) / n, 2),
+            "avg_second_half_conceded": round(sum(valid_st_conceded) / len(valid_st_conceded), 2) if valid_st_conceded else None,
+            "note": "Promedio de goles propios y del rival, anotados/recibidos en cada mitad.",
+        },
+        "tendency_over_2_5_team_goals": (
+            "Sí, suele superar 2.5 goles propios por partido"
+            if (sum(scored) / n) > 2.5 else
+            "No, normalmente anota 2.5 goles propios o menos por partido"
+        ),
+        "recent_matches": sample,
+    }
 
 
 @extra_bp.route("/api/team-trends-multi/<int:team_id>", methods=["GET"])
@@ -1107,113 +1293,309 @@ def team_trends_multi(team_id):
 
     team_name_real = selected[0][1]["teams"]["home"]["name"] if selected[0][1]["teams"]["home"]["id"] == team_id else selected[0][1]["teams"]["away"]["name"]
 
-    scored = []
-    conceded = []
-    over_25_scored = 0
-    over_15_scored = 0
-    clean_sheets = 0
-    failed_to_score = 0
-    ht_goals_scored = []
-    st_goals_scored = []
-    ht_goals_conceded = []
-    st_goals_conceded = []
-    btts = 0
-    wins = draws = losses = 0
-    sample = []
-    leagues_used = set()
-
-    for lg_id, fx in selected:
-        is_home = fx["teams"]["home"]["id"] == team_id
-        gf = fx["goals"]["home"] if is_home else fx["goals"]["away"]
-        ga = fx["goals"]["away"] if is_home else fx["goals"]["home"]
-        if gf is None or ga is None:
-            continue  # partido sin marcador final cargado, lo salteamos
-
-        ht = fx.get("score", {}).get("halftime", {}) or {}
-        ht_gf = ht.get("home") if is_home else ht.get("away")
-        ht_ga = ht.get("away") if is_home else ht.get("home")
-
-        scored.append(gf)
-        conceded.append(ga)
-
-        if gf >= 3:
-            over_25_scored += 1
-        if gf >= 2:
-            over_15_scored += 1
-        if ga == 0:
-            clean_sheets += 1
-        if gf == 0:
-            failed_to_score += 1
-        if gf > 0 and ga > 0:
-            btts += 1
-
-        ht_goals_scored.append(ht_gf if ht_gf is not None else 0)
-        st_goals_scored.append((gf - ht_gf) if ht_gf is not None else None)
-        ht_goals_conceded.append(ht_ga if ht_ga is not None else 0)
-        st_goals_conceded.append((ga - ht_ga) if ht_ga is not None else None)
-
-        if gf > ga:
-            wins += 1
-        elif gf < ga:
-            losses += 1
-        else:
-            draws += 1
-
-        leagues_used.add(lg_id)
-        opponent = fx["teams"]["away"]["name"] if is_home else fx["teams"]["home"]["name"]
-        sample.append({
-            "date": fx["fixture"]["date"][:10],
-            "venue": "local" if is_home else "visitante",
-            "opponent": opponent,
-            "goalsFor": gf,
-            "goalsAgainst": ga,
-            "league_id": lg_id,
-        })
-
-    n = len(sample)
-    if n == 0:
+    result = _compute_apisports_trends_from_fixtures(selected, team_id)
+    if result is None:
         return jsonify({
             "error": "Ninguno de los partidos encontrados tenía marcador final disponible para calcular tendencias."
         }), 404
 
-    valid_st = [g for g in st_goals_scored if g is not None]
-    valid_st_conceded = [g for g in st_goals_conceded if g is not None]
+    result["team_id"] = team_id
+    result["team_matched"] = team_name_real
+    result["leagues_searched"] = league_ids
+    result["league_id_filter_applied"] = competition_filter
 
-    result = {
-        "team_id": team_id,
-        "team_matched": team_name_real,
-        "leagues_searched": league_ids,
-        "leagues_used": sorted(leagues_used),
-        "league_id_filter_applied": competition_filter,
-        "sample_size": n,
-        "record": {"won": wins, "draw": draws, "lost": losses},
-        "goals_for": {
-            "avg_per_match": round(sum(scored) / n, 2),
-            "matches_with_2plus_goals": over_15_scored,
-            "matches_with_2plus_goals_pct": round(over_15_scored / n * 100, 1),
-            "matches_with_3plus_goals": over_25_scored,
-            "matches_with_3plus_goals_pct": round(over_25_scored / n * 100, 1),
-            "failed_to_score_count": failed_to_score,
-            "failed_to_score_pct": round(failed_to_score / n * 100, 1),
-        },
-        "goals_against": {
-            "avg_per_match": round(sum(conceded) / n, 2),
-            "clean_sheets": clean_sheets,
-            "clean_sheets_pct": round(clean_sheets / n * 100, 1),
-        },
-        "btts_pct": round(btts / n * 100, 1),
-        "goals_by_half": {
-            "avg_first_half": round(sum(ht_goals_scored) / n, 2),
-            "avg_second_half": round(sum(valid_st) / len(valid_st), 2) if valid_st else None,
-            "avg_first_half_conceded": round(sum(ht_goals_conceded) / n, 2),
-            "avg_second_half_conceded": round(sum(valid_st_conceded) / len(valid_st_conceded), 2) if valid_st_conceded else None,
-            "note": "Promedio de goles propios y del rival, anotados/recibidos en cada mitad.",
-        },
-        "tendency_over_2_5_team_goals": (
-            "Sí, suele superar 2.5 goles propios por partido"
-            if (sum(scored) / n) > 2.5 else
-            "No, normalmente anota 2.5 goles propios o menos por partido"
-        ),
-        "recent_matches": sample,
-    }
+    # selected ya viene ordenado del más reciente al más viejo (heredado
+    # de _fetch_apisports_multi_league_fixtures), así que las primeras 5
+    # tuplas son los últimos 5 partidos reales en el tiempo.
+    if len(selected) >= 5:
+        short_window = _compute_apisports_trends_from_fixtures(selected[:5], team_id)
+        long_window = _compute_apisports_trends_from_fixtures(selected, team_id)
+        result["form_comparison"] = {
+            "short_window_size": short_window["sample_size"],
+            "long_window_size": long_window["sample_size"],
+            "short_window": {
+                "goals_for_avg": short_window["goals_for"]["avg_per_match"],
+                "goals_against_avg": short_window["goals_against"]["avg_per_match"],
+                "record": short_window["record"],
+                "btts_pct": short_window["btts_pct"],
+                "clean_sheets_pct": short_window["goals_against"]["clean_sheets_pct"],
+            },
+            "long_window": {
+                "goals_for_avg": long_window["goals_for"]["avg_per_match"],
+                "goals_against_avg": long_window["goals_against"]["avg_per_match"],
+                "record": long_window["record"],
+                "btts_pct": long_window["btts_pct"],
+                "clean_sheets_pct": long_window["goals_against"]["clean_sheets_pct"],
+            },
+        }
+    else:
+        result["form_comparison"] = None
+
     return jsonify(result)
+
+
+# Traducción de las razones de baja más comunes que reporta api-sports.io
+# (siempre vienen en inglés). No es exhaustiva, pero cubre el vocabulario
+# real visto en la temporada — lo que no esté acá se muestra tal cual.
+INJURY_REASON_ES = {
+    "ankle injury": "Lesión de tobillo",
+    "sprained ankle": "Esguince de tobillo",
+    "calf injury": "Lesión de gemelo",
+    "foot injury": "Lesión de pie",
+    "groin injury": "Lesión de ingle",
+    "hamstring injury": "Lesión de isquiotibiales",
+    "illness": "Enfermedad",
+    "inactive": "Inactivo",
+    "injured doubtful": "Lesionado, en duda",
+    "injury": "Lesión",
+    "jumpers knee": "Tendinitis rotuliana",
+    "knee injury": "Lesión de rodilla",
+    "knock": "Golpe / contusión",
+    "lacking match fitness": "Sin ritmo de competencia",
+    "leg injury": "Lesión de pierna",
+    "muscle injury": "Lesión muscular",
+    "shoulder injury": "Lesión de hombro",
+    "thigh injury": "Lesión de muslo",
+    "thigh problems": "Problemas en el muslo",
+    "wound": "Herida / corte",
+    "yellow cards": "Suspendido por acumulación de amarillas",
+    "red card": "Suspendido por tarjeta roja",
+    "suspended": "Suspendido",
+    "rest": "Descanso / rotación",
+    "concussion": "Conmoción cerebral",
+    "back injury": "Lesión de espalda",
+    "hip injury": "Lesión de cadera",
+    "wrist injury": "Lesión de muñeca",
+    "personal reasons": "Motivos personales",
+    "covid-19": "COVID-19",
+}
+
+
+def _translate_injury_reason(reason):
+    if not reason:
+        return reason
+    return INJURY_REASON_ES.get(reason.strip().lower(), reason)
+
+
+@extra_bp.route("/api/team-injuries/<int:team_id>", methods=["GET"])
+def team_injuries(team_id):
+    """
+    Lesionados y suspendidos de un equipo de cara a su PRÓXIMO partido
+    programado. Busca el siguiente fixture del equipo y trae las bajas
+    asociadas a ese partido específico.
+
+    OJO — limitación real de los datos, no del código: api-sports.io solo
+    tiene esta información poblada cuando falta POCO para el partido (días,
+    no meses). Si el próximo partido programado está lejos en el
+    calendario (por ejemplo, recién termina una temporada y el próximo
+    partido oficial es en 1-2 meses), es normal y esperable que la
+    respuesta venga vacía aunque el equipo sí tenga jugadores lesionados
+    en este momento — esa info todavía no se cargó para ese fixture
+    puntual. No es un error, es cómo migaja la cobertura de este dato.
+
+    Como respaldo, si el fixture específico no tiene nada cargado, también
+    devolvemos las bajas reportadas más recientemente en la temporada
+    (puede no aplicar exactamente al próximo partido, se marca aparte).
+
+    Ejemplo: /api/team-injuries/42
+    """
+    next_data, err = fetch_apisports("/fixtures", params={"team": team_id, "next": 1}, ttl=300)
+    if err:
+        return jsonify({"error": err}), 502
+
+    next_fixtures = next_data.get("response", [])
+    if not next_fixtures:
+        return jsonify({
+            "team_id": team_id,
+            "next_fixture": None,
+            "injuries_for_next_fixture": [],
+            "recent_injuries_fallback": [],
+            "note": "No se encontró un próximo partido programado para este equipo en api-sports.io.",
+        })
+
+    nf = next_fixtures[0]
+    next_fixture_info = {
+        "fixture_id": nf["fixture"]["id"],
+        "date": nf["fixture"]["date"][:10],
+        "opponent": (
+            nf["teams"]["away"]["name"] if nf["teams"]["home"]["id"] == team_id
+            else nf["teams"]["home"]["name"]
+        ),
+        "venue": "local" if nf["teams"]["home"]["id"] == team_id else "visitante",
+        "league_name": nf["league"]["name"],
+    }
+
+    def _format_injury(inj):
+        return {
+            "player_name": inj["player"]["name"],
+            "photo": inj["player"].get("photo"),
+            "type": inj["player"].get("type"),
+            "reason": _translate_injury_reason(inj["player"].get("reason")),
+            "reason_raw": inj["player"].get("reason"),
+        }
+
+    inj_data, err2 = fetch_apisports(
+        "/injuries", params={"fixture": next_fixture_info["fixture_id"]}, ttl=300
+    )
+    injuries_for_next_fixture = []
+    if not err2:
+        injuries_for_next_fixture = [
+            _format_injury(inj) for inj in inj_data.get("response", [])
+            if inj["team"]["id"] == team_id and inj["player"].get("name")
+        ]
+
+    recent_injuries_fallback = []
+    if not injuries_for_next_fixture:
+        # No hay nada cargado todavía para el próximo partido específico.
+        # Probamos el año de temporada europea (año actual - 1, válido para
+        # clubes con temporada agosto-mayo) y si no hay nada, el año
+        # calendario actual (válido para selecciones, que juegan por año
+        # natural) — sin saber de antemano si team_id es un club o una
+        # selección, probamos ambos y nos quedamos con el que traiga algo.
+        current_year = datetime.now(timezone.utc).year
+        all_injuries = []
+        for season_guess in (current_year - 1, current_year):
+            season_data, err3 = fetch_apisports(
+                "/injuries", params={"team": team_id, "season": season_guess}, ttl=300
+            )
+            if not err3 and season_data.get("response"):
+                all_injuries = season_data["response"]
+                break
+        all_injuries.sort(key=lambda i: i["fixture"]["date"], reverse=True)
+        seen_players = set()
+        for inj in all_injuries:
+            if not inj["player"].get("name"):
+                continue  # api-sports.io a veces devuelve registros sin nombre, los ignoramos
+            pid = inj["player"]["id"]
+            if pid in seen_players:
+                continue
+            seen_players.add(pid)
+            recent_injuries_fallback.append(_format_injury(inj))
+            if len(recent_injuries_fallback) >= 10:
+                break
+
+    if injuries_for_next_fixture:
+        note = None
+    elif recent_injuries_fallback:
+        note = (
+            "Todavía no hay bajas confirmadas específicamente para el próximo partido "
+            "(normal si falta más de unos días). Se muestran las últimas bajas reportadas "
+            "en la temporada como referencia, puede que no coincidan exactamente con "
+            "quién está disponible para este partido en particular."
+        )
+    else:
+        note = (
+            "No hay datos de lesionados/suspendidos disponibles para este equipo en "
+            "api-sports.io. Es más común en selecciones nacionales y equipos de ligas "
+            "menores — la cobertura de este dato es más completa en clubes de ligas top."
+        )
+
+    return jsonify({
+        "team_id": team_id,
+        "next_fixture": next_fixture_info,
+        "injuries_for_next_fixture": injuries_for_next_fixture,
+        "recent_injuries_fallback": recent_injuries_fallback,
+        "note": note,
+    })
+
+
+@extra_bp.route("/api/head-to-head-apisports", methods=["GET"])
+def head_to_head_apisports():
+    """
+    Historial de enfrentamientos directos entre dos equipos buscando en
+    TODAS las competiciones a la vez, via api-sports.io. Pensado para
+    selecciones nacionales (donde el head-to-head de football-data.org
+    solo busca dentro de una competición y se queda corto), pero también
+    funciona para clubes.
+
+    Requiere los IDs numéricos de api-sports.io de ambos equipos — el
+    frontend los resuelve previamente con /api/apisports/search-team.
+
+    Ejemplo: /api/head-to-head-apisports?team1_id=26&team2_id=6&last_n=10
+    """
+    try:
+        team1_id = int(request.args.get("team1_id", ""))
+        team2_id = int(request.args.get("team2_id", ""))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Se requieren ?team1_id=<id> y ?team2_id=<id> numéricos."}), 400
+
+    last_n = int(request.args.get("last_n", 10))
+    team1_name = request.args.get("team1_name", f"Equipo #{team1_id}")
+    team2_name = request.args.get("team2_name", f"Equipo #{team2_id}")
+
+    data, err = fetch_apisports(
+        "/fixtures/headtohead",
+        params={"h2h": f"{team1_id}-{team2_id}", "last": last_n, "status": "FT"},
+        ttl=600,
+    )
+    if err:
+        return jsonify({"error": err}), 502
+
+    fixtures = data.get("response", [])
+    if not fixtures:
+        return jsonify({
+            "error": (
+                f"No se encontraron enfrentamientos directos entre "
+                f"'{team1_name}' y '{team2_name}' en api-sports.io."
+            )
+        }), 404
+
+    team1_wins = team2_wins = draws = 0
+    team1_goals = team2_goals = 0
+    sample = []
+
+    for fx in fixtures:
+        home_id = fx["teams"]["home"]["id"]
+        home_name = fx["teams"]["home"]["name"]
+        away_name = fx["teams"]["away"]["name"]
+        home_goals = fx["goals"]["home"]
+        away_goals = fx["goals"]["away"]
+        if home_goals is None or away_goals is None:
+            continue
+
+        t1_is_home = (home_id == team1_id)
+        t1_goals = home_goals if t1_is_home else away_goals
+        t2_goals = away_goals if t1_is_home else home_goals
+
+        team1_goals += t1_goals
+        team2_goals += t2_goals
+
+        winner = fx["teams"]["home"].get("winner")
+        if winner is None:
+            draws += 1
+        elif (winner and t1_is_home) or (not winner and not t1_is_home):
+            team1_wins += 1
+        else:
+            team2_wins += 1
+
+        sample.append({
+            "date": fx["fixture"]["date"][:10],
+            "competition": fx["league"]["name"],
+            "home_team": home_name,
+            "away_team": away_name,
+            "home_goals": home_goals,
+            "away_goals": away_goals,
+            "t1_goals": t1_goals,
+            "t2_goals": t2_goals,
+            "venue": fx["fixture"].get("venue", {}).get("name") or "—",
+        })
+
+    n = len(sample)
+    return jsonify({
+        "team1_id": team1_id,
+        "team2_id": team2_id,
+        "team1_name": team1_name,
+        "team2_name": team2_name,
+        "matches_found": n,
+        "summary": {
+            "team1_wins": team1_wins,
+            "team2_wins": team2_wins,
+            "draws": draws,
+            "team1_goals_total": team1_goals,
+            "team2_goals_total": team2_goals,
+            "team1_goals_avg": round(team1_goals / n, 2) if n else 0,
+            "team2_goals_avg": round(team2_goals / n, 2) if n else 0,
+        },
+        "matches": sample,
+    })
+

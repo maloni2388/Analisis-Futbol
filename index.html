@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_1.html -->
+<!-- saved from url=(0040)file:///C:/Users/PC/Downloads/index.html -->
 <html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pizarra — Análisis de fútbol</title>
 <link rel="preconnect" href="https://fonts.googleapis.com/">
-<link href="./index_8_files/css2" rel="stylesheet">
+<link href="./index_files/css2" rel="stylesheet">
 <style>
 :root{
   --field-night:#FAFAF7;
@@ -245,6 +245,11 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--field-line);f
     <select class="field-select" id="trendsCompFilter" style="display:none;">
       <option value="">Todas las competiciones</option>
     </select>
+    <select class="field-select" id="windowSelect" style="display:none;">
+      <option value="10">Últimos 10</option>
+      <option value="5">Últimos 5</option>
+      <option value="3">Últimos 3</option>
+    </select>
     <button class="btn" id="loadBtn">Cargar</button>
     <button class="btn ghost" id="backendUrlBtn" title="Cambiar URL del backend">backend</button>
   </div>
@@ -288,6 +293,7 @@ const teamInput = document.getElementById('teamInput');
 const team2Input = document.getElementById('team2Input');
 const confedSelect = document.getElementById('confedSelect');
 const trendsCompFilter = document.getElementById('trendsCompFilter');
+const windowSelect = document.getElementById('windowSelect');
 const loadBtn = document.getElementById('loadBtn');
 const connDot = document.getElementById('connDot');
 const connText = document.getElementById('connText');
@@ -433,23 +439,24 @@ const NATIONAL_TEAM_LEAGUE_CANDIDATES = [
 ];
 
 const TABS_NEEDING = {
-  standings: { competition: true, team: false, team2: false, confed: false, trendsFilter: false },
-  matches: { competition: true, team: false, team2: false, confed: false, trendsFilter: false },
-  trends: { competition: true, team: true, team2: false, confed: false, trendsFilter: true },
-  h2h: { competition: true, team: true, team2: true, confed: false, trendsFilter: false },
-  advanced: { competition: true, team: true, team2: true, confed: false, trendsFilter: false },
-  knockout: { competition: true, team: false, team2: false, confed: false, trendsFilter: false },
-  qualifiers: { competition: false, team: false, team2: false, confed: true, trendsFilter: false },
-  friendlies: { competition: false, team: true, team2: false, confed: false, trendsFilter: false },
+  standings:   { competition: true,  team: false, team2: false, confed: false, trendsFilter: false, window: false },
+  matches:     { competition: true,  team: false, team2: false, confed: false, trendsFilter: false, window: false },
+  trends:      { competition: true,  team: true,  team2: false, confed: false, trendsFilter: true,  window: true  },
+  h2h:         { competition: true,  team: true,  team2: true,  confed: false, trendsFilter: false, window: false },
+  advanced:    { competition: true,  team: true,  team2: true,  confed: false, trendsFilter: false, window: true  },
+  knockout:    { competition: true,  team: false, team2: false, confed: false, trendsFilter: false, window: false },
+  qualifiers:  { competition: false, team: false, team2: false, confed: true,  trendsFilter: false, window: false },
+  friendlies:  { competition: false, team: true,  team2: false, confed: false, trendsFilter: false, window: false },
 };
 
 function updateControlsVisibility() {
   const need = TABS_NEEDING[currentTab] || {};
-  competitionSelect.style.display = need.competition ? '' : 'none';
-  teamInput.style.display = need.team ? '' : 'none';
-  team2Input.style.display = need.team2 ? '' : 'none';
-  confedSelect.style.display = need.confed ? '' : 'none';
-  trendsCompFilter.style.display = need.trendsFilter ? '' : 'none';
+  competitionSelect.style.display  = need.competition  ? '' : 'none';
+  teamInput.style.display          = need.team         ? '' : 'none';
+  team2Input.style.display         = need.team2        ? '' : 'none';
+  confedSelect.style.display       = need.confed       ? '' : 'none';
+  trendsCompFilter.style.display   = need.trendsFilter ? '' : 'none';
+  windowSelect.style.display       = need.window       ? '' : 'none';
   if (currentTab === 'friendlies') {
     teamInput.placeholder = 'Selección (ej: Argentina) — vacío trae las más recientes';
   } else if (currentTab === 'advanced') {
@@ -488,6 +495,39 @@ loadBtn.addEventListener('click', loadCurrentTab);
 teamInput.addEventListener('keydown', e => { if (e.key === 'Enter') loadCurrentTab(); });
 team2Input.addEventListener('keydown', e => { if (e.key === 'Enter') loadCurrentTab(); });
 trendsCompFilter.addEventListener('change', () => loadCurrentTab());
+windowSelect.addEventListener('change', () => loadCurrentTab());
+
+// applyWindow() toma los datos completos que devuelve el backend (siempre
+// pedimos last_n=10 para tener margen) y los recorta al número de partidos
+// que el usuario eligió en el selector, recalculando los promedios en el
+// cliente — sin hacer requests adicionales a la API.
+function applyWindow(avgData, n) {
+  if (!avgData || !avgData.per_match_detail) return avgData;
+  const detail = avgData.per_match_detail.slice(0, n);
+  if (detail.length === 0) return avgData;
+
+  // Recalcular promedios sobre la ventana recortada
+  const numericKeys = [
+    'shots_total','shots_on_goal','shots_off_goal','shots_blocked',
+    'shots_inside_box','shots_outside_box',
+    'corners','corners_against',
+    'fouls','offsides','yellow_cards','red_cards',
+    'possession_pct','goalkeeper_saves','expected_goals','goals_prevented',
+  ];
+  const newAvg = {};
+  for (const key of numericKeys) {
+    const vals = detail.map(m => m[key]).filter(v => v != null);
+    newAvg[key] = vals.length ? Math.round((vals.reduce((a,b) => a+b, 0) / vals.length) * 100) / 100 : null;
+  }
+
+  return {
+    ...avgData,
+    matches_analyzed: detail.length,
+    averages_per_match: newAvg,
+    per_match_detail: detail,
+    // top_shooters y leagues_used se mantienen sin cambio (son del total)
+  };
+}
 
 async function apiFetch(path) {
   const res = await fetch(BACKEND_URL + path);
@@ -711,58 +751,122 @@ async function loadTrends(code) {
     });
     if (compsPresent.map(String).includes(prevValue)) trendsCompFilter.value = prevValue;
 
-    const isOver = data.tendency_over_2_5_team_goals.startsWith('Sí');
+    // Aplicar el filtro de ventana (3/5/10 partidos) recalculando las
+    // métricas sobre el subconjunto de recent_matches, sin hacer un nuevo
+    // request al backend.
+    const nWindow = parseInt(windowSelect.value) || 10;
+    const allMatches = data.recent_matches || [];
+    const windowMatches = allMatches.slice(0, nWindow);
+
+    function calcTrendsMetrics(matches) {
+      if (!matches.length) return null;
+      let gf=0, ga=0, wins=0, draws=0, losses=0, btts=0, cs=0, fts=0;
+      let htGF=0, stGF=0, htGA=0, stGA=0, stCount=0;
+      for (const m of matches) {
+        gf += m.goalsFor; ga += m.goalsAgainst;
+        if (m.goalsFor > m.goalsAgainst) wins++;
+        else if (m.goalsFor < m.goalsAgainst) losses++;
+        else draws++;
+        if (m.goalsFor > 0 && m.goalsAgainst > 0) btts++;
+        if (m.goalsAgainst === 0) cs++;
+        if (m.goalsFor === 0) fts++;
+      }
+      const n = matches.length;
+      return {
+        sample_size: n,
+        goals_for_avg: Math.round(gf/n*100)/100,
+        goals_against_avg: Math.round(ga/n*100)/100,
+        record: { won: wins, draw: draws, lost: losses },
+        btts_pct: Math.round(btts/n*100*10)/10,
+        clean_sheets_pct: Math.round(cs/n*100*10)/10,
+        failed_to_score_pct: Math.round(fts/n*100*10)/10,
+      };
+    }
+
+    const wm = calcTrendsMetrics(windowMatches) || calcTrendsMetrics(allMatches);
+    const isOver = (wm.goals_for_avg || 0) > 2.5;
     const compsLabel = isNationalTeamTrends
       ? (data.leagues_used || []).map(c => LEAGUE_NAME_BY_ID[c] || ('#' + c)).join(', ')
       : (data.competitions_in_sample || []).join(', ');
 
     panel.innerHTML = `
-      <div class="section-label">${escapeHtml(data.team_matched)} — últimos ${data.sample_size} partidos${compsLabel ? ' (' + escapeHtml(compsLabel) + ')' : ''}</div>
+      <div class="section-label">${escapeHtml(data.team_matched)} — últimos ${wm.sample_size} partidos${compsLabel ? ' (' + escapeHtml(compsLabel) + ')' : ''}</div>
 
       <div class="stat-grid">
         <div class="stat-box">
           <div class="label">Goles a favor / partido</div>
-          <div class="value amber">${data.goals_for.avg_per_match}</div>
+          <div class="value amber">${wm.goals_for_avg}</div>
         </div>
         <div class="stat-box">
           <div class="label">Goles en contra / partido</div>
-          <div class="value">${data.goals_against.avg_per_match}</div>
+          <div class="value">${wm.goals_against_avg}</div>
         </div>
         <div class="stat-box">
           <div class="label">Récord (G-E-P)</div>
-          <div class="value" style="font-size:22px;">${data.record.won}-${data.record.draw}-${data.record.lost}</div>
+          <div class="value" style="font-size:22px;">${wm.record.won}-${wm.record.draw}-${wm.record.lost}</div>
         </div>
         <div class="stat-box">
           <div class="label">Vallas invictas</div>
-          <div class="value grass">${data.goals_against.clean_sheets_pct}%</div>
+          <div class="value grass">${wm.clean_sheets_pct}%</div>
         </div>
       </div>
 
       <div class="trend-verdict ${isOver ? '' : 'no'}">
-        ${escapeHtml(data.tendency_over_2_5_team_goals)}
+        ${isOver ? 'Sí, suele superar 2.5 goles propios por partido' : 'No, normalmente anota 2.5 goles propios o menos por partido'}
       </div>
 
       <div class="section-label">Desglose de goles propios</div>
       <div class="bar-row">
-        <div class="bl">2+ goles</div>
-        <div class="bar-track"><div class="bar-fill" style="width:${data.goals_for.matches_with_2plus_goals_pct}%"></div></div>
-        <div class="bv">${data.goals_for.matches_with_2plus_goals_pct}%</div>
-      </div>
-      <div class="bar-row">
-        <div class="bl">3+ goles</div>
-        <div class="bar-track"><div class="bar-fill" style="width:${data.goals_for.matches_with_3plus_goals_pct}%"></div></div>
-        <div class="bv">${data.goals_for.matches_with_3plus_goals_pct}%</div>
-      </div>
-      <div class="bar-row">
         <div class="bl">No anotó</div>
-        <div class="bar-track"><div class="bar-fill grass" style="width:${data.goals_for.failed_to_score_pct}%"></div></div>
-        <div class="bv">${data.goals_for.failed_to_score_pct}%</div>
+        <div class="bar-track"><div class="bar-fill grass" style="width:${wm.failed_to_score_pct}%"></div></div>
+        <div class="bv">${wm.failed_to_score_pct}%</div>
       </div>
       <div class="bar-row">
         <div class="bl">Ambos anotan</div>
-        <div class="bar-track"><div class="bar-fill grass" style="width:${data.btts_pct}%"></div></div>
-        <div class="bv">${data.btts_pct}%</div>
+        <div class="bar-track"><div class="bar-fill grass" style="width:${wm.btts_pct}%"></div></div>
+        <div class="bv">${wm.btts_pct}%</div>
       </div>
+
+      ${data.form_comparison ? `
+      <div class="section-label">Forma reciente (últimos ${data.form_comparison.short_window_size} vs. últimos ${data.form_comparison.long_window_size})</div>
+      <table>
+        <thead><tr>
+          <th></th>
+          <th class="num">Últimos ${data.form_comparison.short_window_size}</th>
+          <th class="num">Últimos ${data.form_comparison.long_window_size}</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td>Récord (G-E-P)</td>
+            <td class="num">${data.form_comparison.short_window.record.won}-${data.form_comparison.short_window.record.draw}-${data.form_comparison.short_window.record.lost}</td>
+            <td class="num">${data.form_comparison.long_window.record.won}-${data.form_comparison.long_window.record.draw}-${data.form_comparison.long_window.record.lost}</td>
+          </tr>
+          <tr>
+            <td>Goles a favor / partido</td>
+            <td class="num" style="color:var(--amber);font-weight:600;">${data.form_comparison.short_window.goals_for_avg}</td>
+            <td class="num">${data.form_comparison.long_window.goals_for_avg}</td>
+          </tr>
+          <tr>
+            <td>Goles en contra / partido</td>
+            <td class="num" style="color:var(--card-red);font-weight:600;">${data.form_comparison.short_window.goals_against_avg}</td>
+            <td class="num">${data.form_comparison.long_window.goals_against_avg}</td>
+          </tr>
+          <tr>
+            <td>Ambos anotan</td>
+            <td class="num">${data.form_comparison.short_window.btts_pct}%</td>
+            <td class="num">${data.form_comparison.long_window.btts_pct}%</td>
+          </tr>
+          <tr>
+            <td>Vallas invictas</td>
+            <td class="num">${data.form_comparison.short_window.clean_sheets_pct}%</td>
+            <td class="num">${data.form_comparison.long_window.clean_sheets_pct}%</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="sub" style="font-size:11px;color:var(--chalk-faint);margin:-4px 0 8px;font-family:'JetBrains Mono',monospace;">
+        Compara los últimos ${data.form_comparison.short_window_size} partidos contra una muestra más amplia, para ver si el equipo está jugando mejor o peor que su promedio "de fondo" en este momento.
+      </div>
+      ` : ''}
 
       <div class="section-label">Goles por mitad (promedio)</div>
       <div class="two-col">
@@ -795,7 +899,7 @@ async function loadTrends(code) {
       </div>
 
       <div class="section-label">Últimos partidos</div>
-      <div class="recent-list">${data.recent_matches.map(m => {
+      <div class="recent-list">${windowMatches.map(m => {
         let res = 'D';
         if (m.goalsFor > m.goalsAgainst) res = 'W';
         else if (m.goalsFor < m.goalsAgainst) res = 'L';
@@ -854,10 +958,53 @@ async function fetchAdvancedDataForTeam(team, code, isNationalTeamTab) {
     avgData = await apiFetch('/api/team-match-stats-avg/' + leagueId + '/' + teamMatch.id + '?last_n=10');
   }
 
-  return { teamMatch, avgData, leagueId };
+  // Lesionados/suspendidos de cara al próximo partido. Es información
+  // "adicional" — si este pedido falla por cualquier motivo, no debe
+  // tirar abajo el resto del bloque de estadísticas, así que se atrapa
+  // el error acá mismo y se devuelve null en vez de propagarlo.
+  let injuriesData = null;
+  try {
+    injuriesData = await apiFetch('/api/team-injuries/' + teamMatch.id);
+  } catch (e) {
+    injuriesData = null;
+  }
+
+  return { teamMatch, avgData, leagueId, injuriesData };
 }
 
-function renderAdvancedBlock(teamMatch, avgData, leagueId, isNationalTeamTab, compact) {
+function renderInjuriesSection(injuriesData) {
+  const nf = injuriesData.next_fixture;
+  const confirmed = injuriesData.injuries_for_next_fixture || [];
+  const fallback = injuriesData.recent_injuries_fallback || [];
+  const list = confirmed.length ? confirmed : fallback;
+
+  const nextFixtureLabel = nf
+    ? `próximo partido: ${escapeHtml(nf.opponent)} (${escapeHtml(nf.date)}, ${escapeHtml(nf.league_name)})`
+    : 'sin próximo partido programado encontrado';
+
+  if (!list.length) {
+    return `
+    <div class="section-label">Lesionados / suspendidos</div>
+    <div class="empty-state" style="padding:14px 16px;font-size:12px;">
+      <i class="ti ti-info-circle"></i> ${escapeHtml(injuriesData.note || 'Sin datos disponibles.')}
+    </div>`;
+  }
+
+  return `
+    <div class="section-label">Lesionados / suspendidos — ${nextFixtureLabel}</div>
+    <table>
+      <thead><tr><th></th><th>Jugador</th><th>Motivo</th></tr></thead>
+      <tbody>${list.map(inj => `
+        <tr>
+          <td>${inj.photo ? `<img class="crest" src="${escapeHtml(inj.photo)}" loading="lazy" onerror="this.style.display='none'" style="border-radius:50%;width:22px;height:22px;"/>` : ''}</td>
+          <td>${escapeHtml(inj.player_name)}</td>
+          <td style="color:${inj.type === 'Missing Fixture' ? 'var(--card-red)' : 'var(--card-yellow)'};">${escapeHtml(inj.reason || inj.type || '—')}</td>
+        </tr>`).join('')}</tbody>
+    </table>
+    ${injuriesData.note ? `<div class="sub" style="font-size:11px;color:var(--chalk-faint);margin:-4px 0 8px;font-family:'JetBrains Mono',monospace;">${escapeHtml(injuriesData.note)}</div>` : ''}`;
+}
+
+function renderAdvancedBlock(teamMatch, avgData, leagueId, isNationalTeamTab, compact, injuriesData) {
   const a = avgData.averages_per_match;
   return `
     <div class="section-label">${escapeHtml(teamMatch.name)} — promedio sobre ${avgData.matches_analyzed} partidos recientes${
@@ -870,6 +1017,7 @@ function renderAdvancedBlock(teamMatch, avgData, leagueId, isNationalTeamTab, co
       <div class="stat-box"><div class="label">Remates totales</div><div class="value amber">${a.shots_total ?? '—'}</div></div>
       <div class="stat-box"><div class="label">Remates al arco</div><div class="value">${a.shots_on_goal ?? '—'}</div></div>
       <div class="stat-box"><div class="label">Corners</div><div class="value grass">${a.corners ?? '—'}</div></div>
+      <div class="stat-box"><div class="label">Corners rivales</div><div class="value">${a.corners_against ?? '—'}</div></div>
       <div class="stat-box"><div class="label">Faltas</div><div class="value">${a.fouls ?? '—'}</div></div>
       <div class="stat-box"><div class="label">Tarjetas amarillas</div><div class="value" style="color:var(--card-yellow)">${a.yellow_cards ?? '—'}</div></div>
       <div class="stat-box"><div class="label">Tarjetas rojas</div><div class="value red">${a.red_cards ?? 0}</div></div>
@@ -890,11 +1038,13 @@ function renderAdvancedBlock(teamMatch, avgData, leagueId, isNationalTeamTab, co
       <div class="stat-box"><div class="label">Por fuera</div><div class="value red">${a.shots_off_goal ?? '—'}</div></div>
     </div>
 
+    ${injuriesData ? renderInjuriesSection(injuriesData) : ''}
+
     ${avgData.top_shooters && avgData.top_shooters.length ? `
-    <div class="section-label">Máximos rematadores</div>
+    <div class="section-label">Máximos rematadores — por promedio al arco / partido</div>
     <table>
       <thead><tr>
-        <th></th><th>Jugador</th><th class="num">Remates</th><th class="num">Al arco</th>
+        <th></th><th>Jugador</th><th class="num">Arco/PJ ↓</th><th class="num">Al arco</th><th class="num">Remates</th><th class="num">PJ</th>
       </tr></thead>
       <tbody>${avgData.top_shooters.slice(0, 5).map((p, i) => `
         <tr>
@@ -903,10 +1053,15 @@ function renderAdvancedBlock(teamMatch, avgData, leagueId, isNationalTeamTab, co
             ${p.photo ? `<img class="crest" src="${escapeHtml(p.photo)}" loading="lazy" onerror="this.style.display='none'" style="border-radius:50%;"/>` : ''}
             <span class="team-name">${escapeHtml(p.name)}</span>
           </div></td>
-          <td class="num" style="color:var(--amber);font-weight:600;">${p.shots_total}</td>
+          <td class="num" style="color:var(--amber);font-weight:600;">${p.shots_on_goal_per_match ?? '—'}</td>
           <td class="num">${p.shots_on_goal}</td>
+          <td class="num">${p.shots_total}</td>
+          <td class="num" style="color:var(--chalk-faint)">${p.matches}</td>
         </tr>`).join('')}</tbody>
     </table>
+    <div class="sub" style="font-size:11px;color:var(--chalk-faint);margin:-4px 0 8px;font-family:'JetBrains Mono',monospace;">
+      Ordenado por remates al arco promedio por partido jugado (Arco/PJ) — prioriza la eficacia sobre el volumen.
+    </div>
     ` : ''}
 
     <div class="section-label">Detalle por partido</div>
@@ -915,8 +1070,8 @@ function renderAdvancedBlock(teamMatch, avgData, leagueId, isNationalTeamTab, co
         <th>Fecha</th><th>Rival</th>${isNationalTeamTab ? '<th>Comp.</th>' : ''}
         <th class="num">Rem.</th><th class="num">Arco</th>
         ${compact
-          ? '<th class="num">Cor.</th><th class="num">Goles</th><th class="num">Flt.</th><th class="num">Am.</th>'
-          : '<th class="num">xG</th><th class="num">Pos.</th><th class="num">Cor.</th><th class="num">Flt.</th><th class="num">Am.</th><th class="num">Roj.</th>'}
+          ? '<th class="num">Cor.</th><th class="num">C.Riv</th><th class="num">Goles</th><th class="num">Flt.</th><th class="num">Am.</th>'
+          : '<th class="num">xG</th><th class="num">Pos.</th><th class="num">Cor.</th><th class="num">C.Riv</th><th class="num">Flt.</th><th class="num">Am.</th><th class="num">Roj.</th>'}
       </tr></thead>
       <tbody>${avgData.per_match_detail.map(m => `
         <tr>
@@ -927,12 +1082,14 @@ function renderAdvancedBlock(teamMatch, avgData, leagueId, isNationalTeamTab, co
           <td class="num">${m.shots_on_goal ?? '—'}</td>
           ${compact ? `
           <td class="num">${m.corners ?? '—'}</td>
+          <td class="num">${m.corners_against ?? '—'}</td>
           <td class="num">${m.goals_for ?? '—'}</td>
           <td class="num">${m.fouls ?? '—'}</td>
           <td class="num">${m.yellow_cards ?? '—'}</td>` : `
           <td class="num">${m.expected_goals ?? '—'}</td>
           <td class="num">${m.possession_pct != null ? m.possession_pct + '%' : '—'}</td>
           <td class="num">${m.corners ?? '—'}</td>
+          <td class="num">${m.corners_against ?? '—'}</td>
           <td class="num">${m.fouls ?? '—'}</td>
           <td class="num">${m.yellow_cards ?? '—'}</td>
           <td class="num">${m.red_cards ?? 0}</td>`}
@@ -959,24 +1116,24 @@ async function loadAdvanced(code) {
 
     if (!team2) {
       // Comportamiento original: un solo equipo, una columna.
-      const { teamMatch, avgData, leagueId } = await fetchAdvancedDataForTeam(team, code, isNationalTeamTab);
-      panel.innerHTML = renderAdvancedBlock(teamMatch, avgData, leagueId, isNationalTeamTab, false);
+      const { teamMatch, avgData: rawData, leagueId, injuriesData } = await fetchAdvancedDataForTeam(team, code, isNationalTeamTab);
+      const n = parseInt(windowSelect.value) || 10;
+      const avgData = applyWindow(rawData, n);
+      panel.innerHTML = renderAdvancedBlock(teamMatch, avgData, leagueId, isNationalTeamTab, false, injuriesData);
       return;
     }
 
-    // Dos equipos: los pedimos en paralelo y mostramos uno al lado del
-    // otro. Si uno de los dos falla (ej: no se encontró ese nombre), igual
-    // mostramos el que sí funcionó en vez de tirar todo.
+    const n = parseInt(windowSelect.value) || 10;
     const [resA, resB] = await Promise.allSettled([
       fetchAdvancedDataForTeam(team, code, isNationalTeamTab),
       fetchAdvancedDataForTeam(team2, code, isNationalTeamTab),
     ]);
 
     const colA = resA.status === 'fulfilled'
-      ? renderAdvancedBlock(resA.value.teamMatch, resA.value.avgData, resA.value.leagueId, isNationalTeamTab, true)
+      ? renderAdvancedBlock(resA.value.teamMatch, applyWindow(resA.value.avgData, n), resA.value.leagueId, isNationalTeamTab, true, resA.value.injuriesData)
       : `<div class="empty-state" style="padding:20px;"><i class="ti ti-alert-circle"></i> ${escapeHtml(resA.reason.message)}</div>`;
     const colB = resB.status === 'fulfilled'
-      ? renderAdvancedBlock(resB.value.teamMatch, resB.value.avgData, resB.value.leagueId, isNationalTeamTab, true)
+      ? renderAdvancedBlock(resB.value.teamMatch, applyWindow(resB.value.avgData, n), resB.value.leagueId, isNationalTeamTab, true, resB.value.injuriesData)
       : `<div class="empty-state" style="padding:20px;"><i class="ti ti-alert-circle"></i> ${escapeHtml(resB.reason.message)}</div>`;
 
     panel.innerHTML = `
@@ -1027,57 +1184,127 @@ async function loadHeadToHead(code) {
   const team1 = teamInput.value.trim();
   const team2 = team2Input.value.trim();
   if (!team1 || !team2) {
-    panel.innerHTML = `<div class="empty-state"><i class="ti ti-versus"></i>Escribí dos equipos arriba (ej: Arsenal y Chelsea) y tocá "Cargar". Busca enfrentamientos dentro de la competición/temporada elegida.</div>`;
+    panel.innerHTML = `<div class="empty-state"><i class="ti ti-versus"></i>Escribí dos equipos arriba y tocá "Cargar". Para selecciones busca en todas las competiciones (Mundial, Copa América, Eliminatoria, amistosos); para clubes busca dentro de la competición elegida.</div>`;
     return;
   }
+  const isNationalH2H = ['WC', 'EC', 'CL', 'CLI'].includes(code);
   panel.innerHTML = loadingBox(`buscando enfrentamientos ${team1} vs ${team2}...`);
   try {
-    const data = await apiFetch('/api/head-to-head/' + code + '?team1=' + encodeURIComponent(translateTeamSearch(team1)) + '&team2=' + encodeURIComponent(translateTeamSearch(team2)) + '&last_n=15');
-    const r = data.record;
-    const total = r.team1_wins + r.draws + r.team2_wins;
-    const pct = (n) => total ? Math.round(n / total * 100) : 0;
+    if (isNationalH2H) {
+      // Selecciones: usamos api-sports.io que sí tiene h2h cross-competition
+      const [s1, s2] = await Promise.all([
+        apiFetch('/api/apisports/search-team?name=' + encodeURIComponent(translateTeamSearch(team1))),
+        apiFetch('/api/apisports/search-team?name=' + encodeURIComponent(translateTeamSearch(team2))),
+      ]);
+      const t1 = (s1.results.filter(t => t.national)[0]) || s1.results[0];
+      const t2 = (s2.results.filter(t => t.national)[0]) || s2.results[0];
+      if (!t1) throw new Error(`No se encontró "${team1}" en api-sports.io.`);
+      if (!t2) throw new Error(`No se encontró "${team2}" en api-sports.io.`);
 
-    panel.innerHTML = `
-      <div class="section-label">${escapeHtml(data.team1)} vs ${escapeHtml(data.team2)} — últimos ${data.sample_size} enfrentamientos en ${escapeHtml(data.competition_code)}</div>
+      const data = await apiFetch(
+        `/api/head-to-head-apisports?team1_id=${t1.id}&team2_id=${t2.id}` +
+        `&team1_name=${encodeURIComponent(t1.name)}&team2_name=${encodeURIComponent(t2.name)}&last_n=15`
+      );
+      const s = data.summary;
+      const total = s.team1_wins + s.team2_wins + s.draws;
+      const pct = n => total ? Math.round(n / total * 100) : 0;
 
-      <div class="stat-grid">
-        <div class="stat-box"><div class="label">${escapeHtml(data.team1)} ganó</div><div class="value amber">${r.team1_wins}</div></div>
-        <div class="stat-box"><div class="label">Empates</div><div class="value">${r.draws}</div></div>
-        <div class="stat-box"><div class="label">${escapeHtml(data.team2)} ganó</div><div class="value grass">${r.team2_wins}</div></div>
-      </div>
+      panel.innerHTML = `
+        <div class="section-label">${escapeHtml(data.team1_name)} vs ${escapeHtml(data.team2_name)} — últimos ${data.matches_found} enfrentamientos (todas las competiciones)</div>
 
-      <div class="section-label">Reparto de resultados</div>
-      <div class="bar-row">
-        <div class="bl">${escapeHtml(data.team1)}</div>
-        <div class="bar-track"><div class="bar-fill" style="width:${pct(r.team1_wins)}%"></div></div>
-        <div class="bv">${pct(r.team1_wins)}%</div>
-      </div>
-      <div class="bar-row">
-        <div class="bl">Empates</div>
-        <div class="bar-track"><div class="bar-fill grass" style="width:${pct(r.draws)}%"></div></div>
-        <div class="bv">${pct(r.draws)}%</div>
-      </div>
-      <div class="bar-row">
-        <div class="bl">${escapeHtml(data.team2)}</div>
-        <div class="bar-track"><div class="bar-fill grass" style="width:${pct(r.team2_wins)}%"></div></div>
-        <div class="bv">${pct(r.team2_wins)}%</div>
-      </div>
+        <div class="stat-grid">
+          <div class="stat-box"><div class="label">${escapeHtml(data.team1_name)} ganó</div><div class="value amber">${s.team1_wins}</div></div>
+          <div class="stat-box"><div class="label">Empates</div><div class="value">${s.draws}</div></div>
+          <div class="stat-box"><div class="label">${escapeHtml(data.team2_name)} ganó</div><div class="value grass">${s.team2_wins}</div></div>
+        </div>
 
-      <div class="section-label">Goles promedio por partido</div>
-      <div class="stat-grid">
-        <div class="stat-box"><div class="label">${escapeHtml(data.team1)}</div><div class="value amber">${data.goals.team1_avg}</div></div>
-        <div class="stat-box"><div class="label">${escapeHtml(data.team2)}</div><div class="value grass">${data.goals.team2_avg}</div></div>
-      </div>
+        <div class="section-label">Reparto de resultados</div>
+        <div class="bar-row">
+          <div class="bl">${escapeHtml(data.team1_name)}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${pct(s.team1_wins)}%"></div></div>
+          <div class="bv">${pct(s.team1_wins)}%</div>
+        </div>
+        <div class="bar-row">
+          <div class="bl">Empates</div>
+          <div class="bar-track"><div class="bar-fill grass" style="width:${pct(s.draws)}%"></div></div>
+          <div class="bv">${pct(s.draws)}%</div>
+        </div>
+        <div class="bar-row">
+          <div class="bl">${escapeHtml(data.team2_name)}</div>
+          <div class="bar-track"><div class="bar-fill grass" style="width:${pct(s.team2_wins)}%"></div></div>
+          <div class="bv">${pct(s.team2_wins)}%</div>
+        </div>
 
-      <div class="section-label">Historial</div>
-      <div>${data.matches.map(m => `
-        <div class="match-row">
-          <div class="match-team home">${escapeHtml(m.homeTeam)}</div>
-          <div class="match-date">${escapeHtml(m.date)}</div>
-          <div class="match-score">${m.homeGoals} : ${m.awayGoals}</div>
-          <div class="match-stage"></div>
-          <div class="match-team away">${escapeHtml(m.awayTeam)}</div>
-        </div>`).join('')}</div>`;
+        <div class="section-label">Goles promedio por partido</div>
+        <div class="stat-grid">
+          <div class="stat-box"><div class="label">${escapeHtml(data.team1_name)}</div><div class="value amber">${s.team1_goals_avg}</div></div>
+          <div class="stat-box"><div class="label">${escapeHtml(data.team2_name)}</div><div class="value grass">${s.team2_goals_avg}</div></div>
+        </div>
+
+        <div class="section-label">Historial</div>
+        <table>
+          <thead><tr><th>Fecha</th><th>Competición</th><th>Local</th><th class="num">G</th><th class="num">G</th><th>Visitante</th></tr></thead>
+          <tbody>${data.matches.map(m => `
+            <tr>
+              <td>${escapeHtml(m.date)}</td>
+              <td style="font-size:11px;color:var(--chalk-faint)">${escapeHtml(m.competition)}</td>
+              <td>${escapeHtml(m.home_team)}</td>
+              <td class="num" style="font-weight:600">${m.home_goals}</td>
+              <td class="num" style="font-weight:600">${m.away_goals}</td>
+              <td>${escapeHtml(m.away_team)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>`;
+
+    } else {
+      // Clubes: football-data.org dentro de la competición elegida
+      const data = await apiFetch('/api/head-to-head/' + code + '?team1=' + encodeURIComponent(translateTeamSearch(team1)) + '&team2=' + encodeURIComponent(translateTeamSearch(team2)) + '&last_n=15');
+      const r = data.record;
+      const total = r.team1_wins + r.draws + r.team2_wins;
+      const pct = (n) => total ? Math.round(n / total * 100) : 0;
+
+      panel.innerHTML = `
+        <div class="section-label">${escapeHtml(data.team1)} vs ${escapeHtml(data.team2)} — últimos ${data.sample_size} enfrentamientos en ${escapeHtml(data.competition_code)}</div>
+
+        <div class="stat-grid">
+          <div class="stat-box"><div class="label">${escapeHtml(data.team1)} ganó</div><div class="value amber">${r.team1_wins}</div></div>
+          <div class="stat-box"><div class="label">Empates</div><div class="value">${r.draws}</div></div>
+          <div class="stat-box"><div class="label">${escapeHtml(data.team2)} ganó</div><div class="value grass">${r.team2_wins}</div></div>
+        </div>
+
+        <div class="section-label">Reparto de resultados</div>
+        <div class="bar-row">
+          <div class="bl">${escapeHtml(data.team1)}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${pct(r.team1_wins)}%"></div></div>
+          <div class="bv">${pct(r.team1_wins)}%</div>
+        </div>
+        <div class="bar-row">
+          <div class="bl">Empates</div>
+          <div class="bar-track"><div class="bar-fill grass" style="width:${pct(r.draws)}%"></div></div>
+          <div class="bv">${pct(r.draws)}%</div>
+        </div>
+        <div class="bar-row">
+          <div class="bl">${escapeHtml(data.team2)}</div>
+          <div class="bar-track"><div class="bar-fill grass" style="width:${pct(r.team2_wins)}%"></div></div>
+          <div class="bv">${pct(r.team2_wins)}%</div>
+        </div>
+
+        <div class="section-label">Goles promedio por partido</div>
+        <div class="stat-grid">
+          <div class="stat-box"><div class="label">${escapeHtml(data.team1)}</div><div class="value amber">${data.goals.team1_avg}</div></div>
+          <div class="stat-box"><div class="label">${escapeHtml(data.team2)}</div><div class="value grass">${data.goals.team2_avg}</div></div>
+        </div>
+
+        <div class="section-label">Historial</div>
+        <div>${data.matches.map(m => `
+          <div class="match-row">
+            <div class="match-team home">${escapeHtml(m.homeTeam)}</div>
+            <div class="match-date">${escapeHtml(m.date)}</div>
+            <div class="match-score">${m.homeGoals} : ${m.awayGoals}</div>
+            <div class="match-stage"></div>
+            <div class="match-team away">${escapeHtml(m.awayTeam)}</div>
+          </div>`).join('')}</div>`;
+    }
   } catch (err) {
     panel.innerHTML = errorBox('No se pudo cargar el cara a cara', err.message);
   }

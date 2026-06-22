@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_3.html -->
+<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_4.html -->
 <html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pizarra — Análisis de fútbol</title>
 <link rel="preconnect" href="https://fonts.googleapis.com/">
-<link href="./index_3_files/css2" rel="stylesheet">
+<link href="./index_4_files/css2" rel="stylesheet">
 <style>
 :root{
   --field-night:#FAFAF7;
@@ -1151,10 +1151,10 @@ function renderPreviewTable(nextFixture, rivalInfo, matches, usedAll) {
 
     <table>
       <thead><tr>
-        <th>Estadística — confiabilidad del backtest</th>
-        <th class="num">Umbral A</th><th class="num">%</th>
-        <th class="num">Umbral B</th><th class="num">%</th>
-        <th class="num">Umbral C</th><th class="num">%</th>
+        <th>Estadística <small style="font-weight:400;color:var(--chalk-faint)">(confianza basada en backtest)</small></th>
+        <th class="num">Si apostás a que ocurre...</th><th class="num">% de veces que pasó históricamente</th>
+        <th class="num">O si apostás a que...</th><th class="num">%</th>
+        <th class="num">O si apostás a que...</th><th class="num">%</th>
       </tr></thead>
       <tbody>
         ${row('🟡 Tarjetas amarillas', 'high',
@@ -1207,12 +1207,16 @@ function renderPreviewTable(nextFixture, rivalInfo, matches, usedAll) {
         )}
       </tbody>
     </table>
-    <div class="sub" style="font-size:11px;color:var(--chalk-faint);margin:-4px 0 12px;font-family:'JetBrains Mono',monospace;line-height:1.6;">
+    <div class="sub" style="font-size:11px;color:var(--chalk-faint);margin:-4px 0 12px;font-family:'JetBrains Mono',monospace;line-height:1.8;">
+      📌 <strong style="color:var(--chalk)">Cómo leer esta tabla:</strong> cada fila es una pregunta del tipo "¿pasó X en partidos similares?". El número verde/ámbar/rojo es la respuesta histórica: si ves 80% verde, significa que en 8 de los últimos 10 partidos parecidos ese evento ocurrió. Si ves 30% rojo, solo ocurrió en 3 de 10.
+      <br>
       ${escapeHtml(sampleNote)}
-      Confiabilidad validada por backtest leave-one-out sobre 60 partidos (3 equipos PL):
-      ✅ Alta confianza ≥80% de acierto histórico | ⚠️ Moderada 60-79% | ❌ Alta varianza &lt;60% — evitar.
-      Corners &gt;9 y &gt;11 fueron eliminados por backtest: 0-19% de acierto real en los datos analizados.
-      Verde = frecuencia histórica ≥70% | Ámbar = 50-69% | Rojo = &lt;50%. Muestra ≥6p confiable, 4-5p moderada, &lt;4p usar con cautela.
+      <br>
+      ✅ <strong>Alta confianza</strong> = esta métrica acertó el 80%+ de las veces en el backtest (amarillas, goles, valla invicta).
+      ⚠️ <strong>Confianza moderada</strong> = acertó el 60-79% — usar con más cuidado.
+      Los colores de los porcentajes indican la frecuencia histórica: 🟢 verde ≥70% pasó casi siempre · 🟡 ámbar 50-69% pasó la mitad · 🔴 rojo &lt;50% pasó pocas veces.
+      <br>
+      Muestra en <span style="color:var(--chalk)">blanco</span> = ≥6 partidos (confiable) · <span style="color:var(--amber)">ámbar</span> = 4-5 partidos (usar con precaución) · <span style="color:var(--card-red)">rojo</span> = menos de 4 partidos (muy poca muestra).
     </div>`;
 }
 
@@ -1464,28 +1468,37 @@ function renderAdvancedBlock(teamMatch, avgData, leagueId, isNationalTeamTab, co
         <div class="stat-box"><div class="label">Máximo total</div><div class="value">${sTotal.max}</div></div>
       </div>
 
-      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--chalk-faint);text-transform:uppercase;letter-spacing:0.5px;margin:10px 0 6px;">Frecuencia sobre umbrales (corners totales del partido)</div>
-      <table>
-        <thead><tr>
-          <th>Umbral</th>
-          <th class="num">Partidos sobre</th>
-          <th class="num">Partidos bajo</th>
-          <th class="num">% sobre</th>
-        </tr></thead>
-        <tbody>${thresholds.map(t => {
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--chalk-faint);text-transform:uppercase;letter-spacing:0.5px;margin:10px 0 8px;">¿Cuántos corners totales hubo en cada partido? (propios + del rival)</div>
+      <div style="margin-bottom:8px;">
+        ${thresholds.map(t => {
           const r = overPct(total, t);
           const bajo = r.total - r.over;
-          const colorPct = r.pct >= 70 ? 'var(--grass)' : r.pct <= 30 ? 'var(--card-red)' : 'var(--chalk)';
-          return `<tr>
-            <td>Más de ${t} corners</td>
-            <td class="num">${r.over} / ${r.total}</td>
-            <td class="num">${bajo} / ${r.total}</td>
-            <td class="num" style="font-weight:600;color:${colorPct}">${r.pct}%</td>
-          </tr>`;
-        }).join('')}</tbody>
-      </table>
+          const colorPct = r.pct >= 70 ? 'var(--grass)' : r.pct <= 30 ? 'var(--card-red)' : 'var(--amber)';
+          const verdict = r.pct >= 70
+            ? 'Pasó casi siempre'
+            : r.pct >= 50
+              ? 'Pasó la mitad de las veces'
+              : r.pct >= 30
+                ? 'Pasó pocas veces'
+                : 'Casi nunca pasó';
+          return `
+          <div style="margin-bottom:10px;padding:10px 12px;background:var(--field-panel-raised);border:1px solid var(--field-line);border-radius:3px;">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+              <span style="font-weight:600;font-size:13px;">¿Hubo más de ${t} corners en total?</span>
+              <span style="font-size:20px;font-weight:700;color:${colorPct}">${r.pct}%</span>
+            </div>
+            <div style="background:var(--field-line);border-radius:2px;height:6px;margin-bottom:6px;overflow:hidden;">
+              <div style="background:${colorPct};width:${r.pct}%;height:100%;border-radius:2px;"></div>
+            </div>
+            <div style="font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--chalk-faint);display:flex;justify-content:space-between;">
+              <span><strong style="color:${colorPct}">${verdict}</strong> — en ${r.over} de los ${r.total} partidos analizados sí hubo más de ${t} corners</span>
+              <span style="color:var(--chalk-faint)">En ${bajo} partidos hubo ${t} o menos</span>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
       <div class="sub" style="font-size:11px;color:var(--chalk-faint);margin:-4px 0 8px;font-family:'JetBrains Mono',monospace;">
-        El promedio solo muestra el centro — el mínimo y máximo muestran cuánto puede variar en un partido individual. Un rango amplio significa alta incertidumbre aunque el promedio parezca claro.
+        Ejemplo de lectura: "¿Hubo más de 8 corners? → 50% → Pasó la mitad de las veces" significa que en 5 de los últimos 10 partidos el total de corners superó 8, y en los otros 5 no llegó a ese número. El promedio de ${sTotal.avg} y el rango ${sTotal.min}–${sTotal.max} muestran cuánto varía este dato partido a partido.
       </div>`;
     })()}
 

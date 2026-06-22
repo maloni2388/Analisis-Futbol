@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<!-- saved from url=(0040)file:///C:/Users/PC/Downloads/index.html -->
+<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_1.html -->
 <html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pizarra — Análisis de fútbol</title>
 <link rel="preconnect" href="https://fonts.googleapis.com/">
-<link href="./index_files/css2" rel="stylesheet">
+<link href="./index_1_files/css2" rel="stylesheet">
 <style>
 :root{
   --field-night:#FAFAF7;
@@ -1022,6 +1022,94 @@ function renderAdvancedBlock(teamMatch, avgData, leagueId, isNationalTeamTab, co
       <div class="stat-box"><div class="label">Tarjetas amarillas</div><div class="value" style="color:var(--card-yellow)">${a.yellow_cards ?? '—'}</div></div>
       <div class="stat-box"><div class="label">Tarjetas rojas</div><div class="value red">${a.red_cards ?? 0}</div></div>
     </div>
+
+    ${(() => {
+      // Análisis de varianza de corners: calculado en el cliente sobre los
+      // datos partido por partido que ya vienen del backend. Muestra mínimo,
+      // máximo y frecuencia sobre umbrales para los corners propios, del
+      // rival, y el TOTAL del partido (propio + rival), que es el dato
+      // relevante para analizar líneas de corners en un partido.
+      const detail = avgData.per_match_detail.filter(
+        m => m.corners != null && m.corners_against != null
+      );
+      if (detail.length < 2) return '';
+
+      const own   = detail.map(m => m.corners);
+      const opp   = detail.map(m => m.corners_against);
+      const total = detail.map(m => m.corners + m.corners_against);
+
+      function stats(arr) {
+        const n = arr.length;
+        const avg = arr.reduce((a,b)=>a+b,0) / n;
+        const min = Math.min(...arr);
+        const max = Math.max(...arr);
+        return { avg: Math.round(avg*10)/10, min, max, n };
+      }
+
+      function overPct(arr, threshold) {
+        const over = arr.filter(v => v > threshold).length;
+        return { over, total: arr.length, pct: Math.round(over/arr.length*100) };
+      }
+
+      const sOwn   = stats(own);
+      const sOpp   = stats(opp);
+      const sTotal = stats(total);
+
+      // Umbrales para corners totales del partido (los más útiles para análisis)
+      const thresholds = [6, 8, 9, 10, 12];
+
+      return `
+      <div class="section-label">Análisis de corners — varianza real (${sTotal.n} partidos)</div>
+      <div class="two-col" style="gap:12px;margin-bottom:8px;">
+        <div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--chalk-faint);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Propios</div>
+          <div class="stat-grid" style="grid-template-columns:1fr 1fr 1fr;">
+            <div class="stat-box"><div class="label">Promedio</div><div class="value grass">${sOwn.avg}</div></div>
+            <div class="stat-box"><div class="label">Mínimo</div><div class="value">${sOwn.min}</div></div>
+            <div class="stat-box"><div class="label">Máximo</div><div class="value">${sOwn.max}</div></div>
+          </div>
+        </div>
+        <div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--chalk-faint);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Del rival</div>
+          <div class="stat-grid" style="grid-template-columns:1fr 1fr 1fr;">
+            <div class="stat-box"><div class="label">Promedio</div><div class="value">${sOpp.avg}</div></div>
+            <div class="stat-box"><div class="label">Mínimo</div><div class="value">${sOpp.min}</div></div>
+            <div class="stat-box"><div class="label">Máximo</div><div class="value">${sOpp.max}</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--chalk-faint);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Total del partido (propios + rival)</div>
+      <div class="stat-grid" style="grid-template-columns:1fr 1fr 1fr;">
+        <div class="stat-box"><div class="label">Promedio total</div><div class="value amber">${sTotal.avg}</div></div>
+        <div class="stat-box"><div class="label">Mínimo total</div><div class="value">${sTotal.min}</div></div>
+        <div class="stat-box"><div class="label">Máximo total</div><div class="value">${sTotal.max}</div></div>
+      </div>
+
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--chalk-faint);text-transform:uppercase;letter-spacing:0.5px;margin:10px 0 6px;">Frecuencia sobre umbrales (corners totales del partido)</div>
+      <table>
+        <thead><tr>
+          <th>Umbral</th>
+          <th class="num">Partidos sobre</th>
+          <th class="num">Partidos bajo</th>
+          <th class="num">% sobre</th>
+        </tr></thead>
+        <tbody>${thresholds.map(t => {
+          const r = overPct(total, t);
+          const bajo = r.total - r.over;
+          const colorPct = r.pct >= 70 ? 'var(--grass)' : r.pct <= 30 ? 'var(--card-red)' : 'var(--chalk)';
+          return `<tr>
+            <td>Más de ${t} corners</td>
+            <td class="num">${r.over} / ${r.total}</td>
+            <td class="num">${bajo} / ${r.total}</td>
+            <td class="num" style="font-weight:600;color:${colorPct}">${r.pct}%</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+      <div class="sub" style="font-size:11px;color:var(--chalk-faint);margin:-4px 0 8px;font-family:'JetBrains Mono',monospace;">
+        El promedio solo muestra el centro — el mínimo y máximo muestran cuánto puede variar en un partido individual. Un rango amplio significa alta incertidumbre aunque el promedio parezca claro.
+      </div>`;
+    })()}
 
     <div class="section-label">Calidad de juego (avanzado)</div>
     <div class="stat-grid">

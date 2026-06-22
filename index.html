@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_1.html -->
+<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_2.html -->
 <html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pizarra — Análisis de fútbol</title>
 <link rel="preconnect" href="https://fonts.googleapis.com/">
-<link href="./index_1_files/css2" rel="stylesheet">
+<link href="./index_2_files/css2" rel="stylesheet">
 <style>
 :root{
   --field-night:#FAFAF7;
@@ -969,8 +969,362 @@ async function fetchAdvancedDataForTeam(team, code, isNationalTeamTab) {
     injuriesData = null;
   }
 
-  return { teamMatch, avgData, leagueId, injuriesData };
+  // Tabla de posiciones — solo para clubes, para clasificar al rival
+  // por nivel (Top/Medio/Bajo). Para selecciones no hay tabla aplicable.
+  let standingsTable = null;
+  if (!isNationalTeamTab) {
+    try {
+      const sData = await apiFetch('/api/standings/' + code);
+      standingsTable = sData.table || null;
+    } catch (e) {
+      standingsTable = null;
+    }
+  }
+
+  return { teamMatch, avgData, leagueId, injuriesData, standingsTable };
 }
+
+
+// Clasifica un rival por nombre (con tabla de posiciones) o por datos del partido
+// (resultado + goles, para selecciones sin tabla). Reutilizado por
+// renderRivalLevelAnalysis y renderNextMatchPreview.
+function classifyRivalByName(opponentName, posMap) {
+  if (!posMap || !Object.keys(posMap).length) return null;
+  const rivalLower = opponentName.toLowerCase();
+  let pos = posMap[rivalLower];
+  if (!pos) {
+    for (const [key, val] of Object.entries(posMap)) {
+      if (key.includes(rivalLower) || rivalLower.includes(key.replace(/ fc| afc| cf| sc/g,'').trim())) {
+        pos = val; break;
+      }
+    }
+  }
+  if (!pos) return null;
+  if (pos <= 6)  return { level: 'top', label: 'Top (pos. 1–6)',    pos };
+  if (pos <= 14) return { level: 'mid', label: 'Medio (pos. 7–14)', pos };
+  return               { level: 'low', label: 'Bajo (pos. 15+)',    pos };
+}
+
+function classifyRivalByMatch(gf, ga) {
+  // Para selecciones: misma lógica que renderRivalLevelAnalysis
+  if ((gf != null && ga != null)) {
+    if (ga >= 2) return { level: 'top', label: 'Rival difícil' };
+    const result = gf > ga ? 'W' : gf < ga ? 'L' : 'D';
+    if (result === 'L') return { level: 'top', label: 'Rival difícil' };
+    if (result === 'W' && gf >= 2 && ga === 0) return { level: 'low', label: 'Rival accesible' };
+  }
+  return { level: 'mid', label: 'Rival parejo' };
+}
+
+// Herramienta principal: analiza el próximo partido del equipo y calcula
+// probabilidades históricas basadas en partidos contra rivales del mismo nivel.
+function renderNextMatchPreview(nextFixture, detail, standingsTable, isNationalTeamTab) {
+  if (!nextFixture || !detail || detail.length < 3) return '';
+
+  // Construir posMap para clasificar por tabla
+  const posMap = {};
+  if (standingsTable && standingsTable.length) {
+    for (const row of standingsTable) {
+      const name = (row.team || row.shortName || '').toLowerCase();
+      posMap[name] = row.position;
+    }
+  }
+  const hasStandings = Object.keys(posMap).length > 0;
+
+  // Clasificar el próximo rival
+  const nextOpponent = nextFixture.opponent;
+  let nextRivalInfo = hasStandings
+    ? classifyRivalByName(nextOpponent, posMap)
+    : null;
+
+  // Si no encontramos en la tabla, usar nivel medio como default
+  if (!nextRivalInfo) {
+    nextRivalInfo = { level: 'mid', label: hasStandings ? 'No encontrado en tabla (nivel medio estimado)' : 'Nivel estimado por partidos históricos' };
+  }
+
+  // Clasificar cada partido histórico con el mismo criterio
+  function classifyHistoricMatch(m) {
+    if (hasStandings) {
+      const info = classifyRivalByName(m.opponent, posMap);
+      return info ? info.level : 'unknown';
+    } else {
+      return classifyRivalByMatch(m.goals_for, m.goals_against).level;
+    }
+  }
+
+  // Filtrar partidos históricos del mismo nivel que el próximo rival
+  const sameLevel = detail.filter(m => classifyHistoricMatch(m) === nextRivalInfo.level);
+
+  if (sameLevel.length < 2) {
+    // Poca muestra del mismo nivel → usar todos los partidos con aviso
+    const allDetail = detail;
+    return renderPreviewTable(nextFixture, nextRivalInfo, allDetail, true);
+  }
+  return renderPreviewTable(nextFixture, nextRivalInfo, sameLevel, false);
+}
+
+function renderPreviewTable(nextFixture, rivalInfo, matches, usedAll) {
+  const n = matches.length;
+
+  function pct(fn) {
+    const count = matches.filter(fn).length;
+    const p = Math.round(count / n * 100);
+    const color = p >= 70 ? 'var(--grass)' : p >= 50 ? 'var(--amber)' : 'var(--card-red)';
+    return { count, pct: p, color };
+  }
+
+  // Corners totales
+  const totCorners = matches.map(m => (m.corners ?? 0) + (m.corners_against ?? 0));
+  const avgCornersTotal = totCorners.length
+    ? Math.round(totCorners.reduce((a,b)=>a+b,0)/n*10)/10 : '—';
+
+  // Remates al arco propios
+  const avgShotsOn = matches.filter(m=>m.shots_on_goal!=null).length
+    ? Math.round(matches.reduce((a,m)=>a+(m.shots_on_goal??0),0)/n*10)/10 : '—';
+
+  // Faltas propias
+  const avgFouls = matches.filter(m=>m.fouls!=null).length
+    ? Math.round(matches.reduce((a,m)=>a+(m.fouls??0),0)/n*10)/10 : '—';
+
+  // Amarillas propias
+  const avgYellow = matches.filter(m=>m.yellow_cards!=null).length
+    ? Math.round(matches.reduce((a,m)=>a+(m.yellow_cards??0),0)/n*10)/10 : '—';
+
+  // Definir umbrales
+  const rows = [
+    {
+      label: 'Corners totales del partido',
+      umbrales: [
+        { txt: 'Más de 7',  fn: m => (m.corners??0)+(m.corners_against??0) > 7  },
+        { txt: 'Más de 9',  fn: m => (m.corners??0)+(m.corners_against??0) > 9  },
+        { txt: 'Más de 11', fn: m => (m.corners??0)+(m.corners_against??0) > 11 },
+      ],
+      avg: `Promedio: ${avgCornersTotal}`,
+    },
+    {
+      label: 'Remates al arco (propios)',
+      umbrales: [
+        { txt: 'Más de 3',  fn: m => (m.shots_on_goal??0) > 3 },
+        { txt: 'Más de 5',  fn: m => (m.shots_on_goal??0) > 5 },
+        { txt: 'Más de 7',  fn: m => (m.shots_on_goal??0) > 7 },
+      ],
+      avg: `Promedio: ${avgShotsOn}`,
+    },
+    {
+      label: 'Faltas cometidas',
+      umbrales: [
+        { txt: 'Más de 10', fn: m => (m.fouls??0) > 10 },
+        { txt: 'Más de 13', fn: m => (m.fouls??0) > 13 },
+        { txt: 'Más de 15', fn: m => (m.fouls??0) > 15 },
+      ],
+      avg: `Promedio: ${avgFouls}`,
+    },
+    {
+      label: 'Tarjetas amarillas',
+      umbrales: [
+        { txt: '1 o más',  fn: m => (m.yellow_cards??0) >= 1 },
+        { txt: '2 o más',  fn: m => (m.yellow_cards??0) >= 2 },
+        { txt: '3 o más',  fn: m => (m.yellow_cards??0) >= 3 },
+      ],
+      avg: `Promedio: ${avgYellow}`,
+    },
+    {
+      label: 'Goles marcados',
+      umbrales: [
+        { txt: '1 o más',  fn: m => (m.goals_for??0) >= 1 },
+        { txt: '2 o más',  fn: m => (m.goals_for??0) >= 2 },
+        { txt: '3 o más',  fn: m => (m.goals_for??0) >= 3 },
+      ],
+      avg: '',
+    },
+    {
+      label: 'Goles recibidos',
+      umbrales: [
+        { txt: '0 (valla invicta)', fn: m => (m.goals_against??99) === 0 },
+        { txt: '1 o más',           fn: m => (m.goals_against??0) >= 1 },
+        { txt: '2 o más',           fn: m => (m.goals_against??0) >= 2 },
+      ],
+      avg: '',
+    },
+  ];
+
+  const sampleNote = usedAll
+    ? `⚠ Pocos partidos históricos contra este nivel de rival (muestra: todos los ${n} partidos disponibles)`
+    : `Muestra: ${n} partidos históricos contra rivales del mismo nivel (${escapeHtml(rivalInfo.label)})`;
+
+  return `
+    <div class="section-label">🔍 Vista previa: próximo partido</div>
+    <div style="background:var(--field-panel-raised);border:1px solid var(--field-line);border-radius:4px;padding:14px 16px;margin-bottom:12px;">
+      <div style="font-family:'Oswald',sans-serif;font-size:15px;font-weight:600;letter-spacing:0.5px;margin-bottom:6px;">
+        vs ${escapeHtml(nextFixture.opponent)} &nbsp;·&nbsp;
+        <span style="font-weight:400;font-size:13px;color:var(--chalk-dim)">${escapeHtml(nextFixture.date)} &nbsp;·&nbsp; ${nextFixture.venue === 'local' ? 'Local' : 'Visitante'} &nbsp;·&nbsp; ${escapeHtml(nextFixture.league_name)}</span>
+      </div>
+      <div style="font-size:12px;color:var(--chalk-dim);font-family:'JetBrains Mono',monospace;">
+        Nivel estimado del rival: <strong style="color:var(--chalk)">${escapeHtml(rivalInfo.label)}</strong>
+        ${rivalInfo.pos ? ` (posición ${rivalInfo.pos} en la tabla)` : ''}
+      </div>
+    </div>
+
+    <table>
+      <thead><tr>
+        <th>Estadística</th>
+        <th class="num">Umbral A</th>
+        <th class="num">%</th>
+        <th class="num">Umbral B</th>
+        <th class="num">%</th>
+        <th class="num">Umbral C</th>
+        <th class="num">%</th>
+      </tr></thead>
+      <tbody>
+        ${rows.map(r => {
+          const [u1, u2, u3] = r.umbrales;
+          const p1 = pct(u1.fn), p2 = pct(u2.fn), p3 = pct(u3.fn);
+          return `<tr>
+            <td>${r.label}${r.avg ? `<br><small style="color:var(--chalk-faint)">${r.avg}</small>` : ''}</td>
+            <td class="num">${escapeHtml(u1.txt)}</td>
+            <td class="num" style="font-weight:600;color:${p1.color}">${p1.pct}%<br><small style="font-weight:400;color:var(--chalk-faint)">${p1.count}/${n}</small></td>
+            <td class="num">${escapeHtml(u2.txt)}</td>
+            <td class="num" style="font-weight:600;color:${p2.color}">${p2.pct}%<br><small style="font-weight:400;color:var(--chalk-faint)">${p2.count}/${n}</small></td>
+            <td class="num">${escapeHtml(u3.txt)}</td>
+            <td class="num" style="font-weight:600;color:${p3.color}">${p3.pct}%<br><small style="font-weight:400;color:var(--chalk-faint)">${p3.count}/${n}</small></td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    <div class="sub" style="font-size:11px;color:var(--chalk-faint);margin:-4px 0 8px;font-family:'JetBrains Mono',monospace;">
+      ${escapeHtml(sampleNote)}. Verde = alta frecuencia histórica (≥70%), ámbar = moderada (50-69%), rojo = baja (&lt;50%).
+      Estos son porcentajes históricos, no predicciones garantizadas.
+    </div>`;
+}
+
+
+function renderRivalLevelAnalysis(detail, standingsTable, isNationalTeamTab) {
+  if (!detail || detail.length < 3) return '';
+  const posMap = {};
+  if (standingsTable && standingsTable.length) {
+    for (const row of standingsTable) {
+      const name = (row.team || row.shortName || '').toLowerCase();
+      posMap[name] = row.position;
+    }
+  }
+  const hasStandings = Object.keys(posMap).length > 0;
+
+  function getRivalLevel(m) {
+    if (hasStandings) {
+      // CLUBES: posición en la tabla de posiciones
+      const rivalLower = m.opponent.toLowerCase();
+      let pos = posMap[rivalLower];
+      if (!pos) {
+        for (const [key, val] of Object.entries(posMap)) {
+          if (key.includes(rivalLower) || rivalLower.includes(key.replace(/ fc| afc| cf| sc/g,'').trim())) {
+            pos = val; break;
+          }
+        }
+      }
+      if (!pos) return 'unknown';
+      if (pos <= 6)  return 'top';
+      if (pos <= 14) return 'mid';
+      return 'low';
+    } else {
+      // SELECCIONES: combinación de 3 señales del propio partido
+      // Señal 1 — Resultado: si el equipo analizado PERDIÓ = rival fuerte
+      //           si GANÓ cómodamente = rival débil
+      const gf = m.goals_for ?? 0;
+      const ga = m.goals_against ?? 0;
+      const result = gf > ga ? 'W' : gf < ga ? 'L' : 'D';
+
+      // Señal 2 — Goles recibidos por el equipo analizado:
+      //   >= 2 = rival peligroso ofensivamente (difícil)
+      //   1    = rival moderado
+      //   0    = rival sin gol (fácil defensivamente)
+      const gaSignal = ga >= 2 ? 'top' : ga === 1 ? 'mid' : 'low';
+
+      // Señal 3 — Goles marcados por el equipo analizado:
+      //   >= 3 = rival poroso defensivamente (fácil)
+      //   1-2  = rival moderado
+      //   0    = rival muy defensivo (puede ser difícil o empate sin goles)
+      const gfSignal = gf >= 3 ? 'low' : gf >= 1 ? 'mid' : 'top';
+
+      // Combinar: el resultado tiene el mayor peso
+      // Perdió claramente (y recibió 2+) = rival Top
+      // Ganó cómodamente (marcó 3+ y no recibió) = rival Bajo
+      // Todo lo demás = Medio
+      if (result === 'L' && ga >= 2) return 'top';
+      if (result === 'L') return 'top';
+      if (result === 'W' && gf >= 3 && ga === 0) return 'low';
+      if (result === 'W' && gf >= 2 && ga === 0) return 'low';
+      if (result === 'W' && ga >= 2) return 'top'; // ganó pero recibió mucho = rival difícil igual
+      return 'mid';
+    }
+  }
+
+  const groups = { top: [], mid: [], low: [] };
+  for (const m of detail) {
+    const lvl = getRivalLevel(m);
+    if (lvl !== 'unknown') groups[lvl].push(m);
+  }
+  if (!Object.values(groups).some(g => g.length >= 2)) return '';
+
+  function groupStats(matches) {
+    if (!matches || !matches.length) return null;
+    const n = matches.length;
+    const avg = (key) => {
+      const vals = matches.map(m => m[key]).filter(v => v != null);
+      return vals.length ? Math.round(vals.reduce((a,b)=>a+b,0)/vals.length*10)/10 : null;
+    };
+    const totalCorners = matches.map(m => (m.corners ?? 0) + (m.corners_against ?? 0));
+    return {
+      n,
+      corners: avg('corners'),
+      corners_against: avg('corners_against'),
+      corners_total: totalCorners.length ? Math.round(totalCorners.reduce((a,b)=>a+b,0)/n*10)/10 : null,
+      shots_total: avg('shots_total'),
+      shots_on_goal: avg('shots_on_goal'),
+      xg: avg('expected_goals'),
+    };
+  }
+
+  const topStats = groupStats(groups.top);
+  const midStats = groupStats(groups.mid);
+  const lowStats = groupStats(groups.low);
+  const labelTop = hasStandings ? 'Top (1-6)'    : 'Rival difícil';
+  const labelMid = hasStandings ? 'Medio (7-14)' : 'Rival parejo';
+  const labelLow = hasStandings ? 'Bajo (15+)'   : 'Rival accesible';
+
+  function cell(stats, key) {
+    if (!stats) return '<td class="num" style="color:var(--chalk-faint)">—</td>';
+    const v = stats[key];
+    return `<td class="num">${v ?? '—'}</td>`;
+  }
+  function row(label, key) {
+    return `<tr><td>${label}</td>${cell(topStats,key)}${cell(midStats,key)}${cell(lowStats,key)}</tr>`;
+  }
+
+  const note = hasStandings
+    ? 'CLUBES — Clasificación por posición actual del rival en la tabla (1-6 Top, 7-14 Medio, 15+ Bajo).'
+    : 'SELECCIONES — Clasificación por 3 señales del propio partido: resultado, goles recibidos y goles marcados. Perdió o recibió 2+ = rival difícil; ganó cómodamente con 2+ goles y valla invicta = rival accesible; el resto = parejo.';
+
+  return `
+    <div class="section-label">Rendimiento según nivel del rival</div>
+    <table>
+      <thead><tr>
+        <th>Métrica</th>
+        <th class="num">${escapeHtml(labelTop)}<br><small style="font-weight:400;color:var(--chalk-faint)">${topStats ? topStats.n+'p' : '—'}</small></th>
+        <th class="num">${escapeHtml(labelMid)}<br><small style="font-weight:400;color:var(--chalk-faint)">${midStats ? midStats.n+'p' : '—'}</small></th>
+        <th class="num">${escapeHtml(labelLow)}<br><small style="font-weight:400;color:var(--chalk-faint)">${lowStats ? lowStats.n+'p' : '—'}</small></th>
+      </tr></thead>
+      <tbody>
+        ${row('Corners propios','corners')}
+        ${row('Corners del rival','corners_against')}
+        ${row('Corners totales','corners_total')}
+        ${row('Remates totales','shots_total')}
+        ${row('Remates al arco','shots_on_goal')}
+        ${row('xG','xg')}
+      </tbody>
+    </table>
+    <div class="sub" style="font-size:11px;color:var(--chalk-faint);margin:-4px 0 8px;font-family:'JetBrains Mono',monospace;">${escapeHtml(note)}</div>`;
+}
+
 
 function renderInjuriesSection(injuriesData) {
   const nf = injuriesData.next_fixture;
@@ -1004,9 +1358,14 @@ function renderInjuriesSection(injuriesData) {
     ${injuriesData.note ? `<div class="sub" style="font-size:11px;color:var(--chalk-faint);margin:-4px 0 8px;font-family:'JetBrains Mono',monospace;">${escapeHtml(injuriesData.note)}</div>` : ''}`;
 }
 
-function renderAdvancedBlock(teamMatch, avgData, leagueId, isNationalTeamTab, compact, injuriesData) {
+function renderAdvancedBlock(teamMatch, avgData, leagueId, isNationalTeamTab, compact, injuriesData, standingsTable) {
   const a = avgData.averages_per_match;
+  // Extraer el próximo partido del injuriesData (ya lo buscamos para lesionados)
+  const nextFixture = injuriesData && injuriesData.next_fixture ? injuriesData.next_fixture : null;
+
   return `
+    ${!compact && nextFixture ? renderNextMatchPreview(nextFixture, avgData.per_match_detail, standingsTable, isNationalTeamTab) : ''}
+
     <div class="section-label">${escapeHtml(teamMatch.name)} — promedio sobre ${avgData.matches_analyzed} partidos recientes${
       isNationalTeamTab
         ? (avgData.leagues_used && avgData.leagues_used.length > 1 ? ' (varias competiciones)' : '')
@@ -1126,6 +1485,8 @@ function renderAdvancedBlock(teamMatch, avgData, leagueId, isNationalTeamTab, co
       <div class="stat-box"><div class="label">Por fuera</div><div class="value red">${a.shots_off_goal ?? '—'}</div></div>
     </div>
 
+    ${renderRivalLevelAnalysis(avgData.per_match_detail, standingsTable, isNationalTeamTab)}
+
     ${injuriesData ? renderInjuriesSection(injuriesData) : ''}
 
     ${avgData.top_shooters && avgData.top_shooters.length ? `
@@ -1204,10 +1565,10 @@ async function loadAdvanced(code) {
 
     if (!team2) {
       // Comportamiento original: un solo equipo, una columna.
-      const { teamMatch, avgData: rawData, leagueId, injuriesData } = await fetchAdvancedDataForTeam(team, code, isNationalTeamTab);
+      const { teamMatch, avgData: rawData, leagueId, injuriesData, standingsTable } = await fetchAdvancedDataForTeam(team, code, isNationalTeamTab);
       const n = parseInt(windowSelect.value) || 10;
       const avgData = applyWindow(rawData, n);
-      panel.innerHTML = renderAdvancedBlock(teamMatch, avgData, leagueId, isNationalTeamTab, false, injuriesData);
+      panel.innerHTML = renderAdvancedBlock(teamMatch, avgData, leagueId, isNationalTeamTab, false, injuriesData, standingsTable);
       return;
     }
 
@@ -1218,10 +1579,10 @@ async function loadAdvanced(code) {
     ]);
 
     const colA = resA.status === 'fulfilled'
-      ? renderAdvancedBlock(resA.value.teamMatch, applyWindow(resA.value.avgData, n), resA.value.leagueId, isNationalTeamTab, true, resA.value.injuriesData)
+      ? renderAdvancedBlock(resA.value.teamMatch, applyWindow(resA.value.avgData, n), resA.value.leagueId, isNationalTeamTab, true, resA.value.injuriesData, resA.value.standingsTable)
       : `<div class="empty-state" style="padding:20px;"><i class="ti ti-alert-circle"></i> ${escapeHtml(resA.reason.message)}</div>`;
     const colB = resB.status === 'fulfilled'
-      ? renderAdvancedBlock(resB.value.teamMatch, applyWindow(resB.value.avgData, n), resB.value.leagueId, isNationalTeamTab, true, resB.value.injuriesData)
+      ? renderAdvancedBlock(resB.value.teamMatch, applyWindow(resB.value.avgData, n), resB.value.leagueId, isNationalTeamTab, true, resB.value.injuriesData, resB.value.standingsTable)
       : `<div class="empty-state" style="padding:20px;"><i class="ti ti-alert-circle"></i> ${escapeHtml(resB.reason.message)}</div>`;
 
     panel.innerHTML = `

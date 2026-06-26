@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_5.html -->
+<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_9.html -->
 <html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pizarra — Análisis de fútbol</title>
 <link rel="preconnect" href="https://fonts.googleapis.com/">
-<link href="./index_5_files/css2" rel="stylesheet">
+<link href="./index_9_files/css2" rel="stylesheet">
 <style>
 :root{
   --field-night:#FAFAF7;
@@ -264,6 +264,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--field-line);f
     <button class="tab" data-tab="qualifiers">Eliminatorias mundialistas</button>
     <button class="tab" data-tab="friendlies">Amistosos</button>
     <button class="tab" data-tab="parlay" style="color:var(--amber);font-weight:600;">🎯 Parlay</button>
+    <button class="tab" data-tab="odds" style="color:var(--grass);font-weight:600;">📊 Cuotas en vivo</button>
   </div>
 
   <div class="panel active" id="panel-standings"><div class="error-box"><div class="err-title">Todavía no configuraste la URL de tu backend</div>Tocá el botón "backend" arriba a la derecha y pegá la URL que te dio Render (algo como https://tu-app.onrender.com). Se va a guardar en este navegador para la próxima vez.</div></div>
@@ -275,9 +276,9 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--field-line);f
   <div class="panel" id="panel-qualifiers"></div>
   <div class="panel" id="panel-friendlies"></div>
   <div class="panel" id="panel-parlay"></div>
-  <div class="panel" id="panel-parlay"></div>
+  <div class="panel" id="panel-odds"></div>
 
-  <footer>Datos: football-data.org (ligas, selecciones, fixtures) + api-sports.io (remates, corners, tarjetas). Corré <code>backend.py</code> en local para que esto funcione con datos reales.</footer>
+  <footer>Datos: football-data.org (ligas, selecciones, fixtures) + api-sports.io (remates, corners, tarjetas) + The Odds API (cuotas en vivo de +70 casas). Corré <code>backend.py</code> en local para que esto funcione con datos reales.</footer>
 </div>
 
 <script>
@@ -452,6 +453,7 @@ const TABS_NEEDING = {
   friendlies:  { competition: false, team: true,  team2: false, confed: false, trendsFilter: false, window: false },
   parlay:      { competition: false, team: false, team2: false, confed: false, trendsFilter: false, window: false },
   parlay:      { competition: false, team: false, team2: false, confed: false, trendsFilter: false, window: false },
+  odds:        { competition: true,  team: false, team2: false, confed: false, trendsFilter: false, window: false },
 };
 
 function updateControlsVisibility() {
@@ -616,6 +618,7 @@ function loadCurrentTab() {
   else if (currentTab === 'qualifiers') loadQualifiers();
   else if (currentTab === 'friendlies') loadFriendlies();
   else if (currentTab === 'parlay')     loadParlay();
+  else if (currentTab === 'odds')       loadOdds();
 }
 
 function formPill(letter) {
@@ -1948,19 +1951,22 @@ async function loadFriendlies() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PARLAY_MARKETS = [
-  { id: 'yellow_1plus',        label: '🟡 Tarjeta amarilla (≥1)',   trust: 'high',   fn: m => (m.yellow_cards??0) >= 1 },
-  { id: 'yellow_2plus',        label: '🟡🟡 Tarjetas amarillas (≥2)', trust: 'medium', fn: m => (m.yellow_cards??0) >= 2 },
-  { id: 'goals_1plus',         label: '⚽ Anota ≥1 gol',            trust: 'high',   fn: m => (m.goals_for??0) >= 1 },
-  { id: 'goals_2plus',         label: '⚽⚽ Anota ≥2 goles',         trust: 'high',   fn: m => (m.goals_for??0) >= 2 },
-  { id: 'clean_sheet',         label: '🧤 Valla invicta',            trust: 'high',   fn: m => (m.goals_against??99) === 0 },
-  { id: 'concede_1plus',       label: '🥅 Recibe ≥1 gol',           trust: 'high',   fn: m => (m.goals_against??0) >= 1 },
-  { id: 'corners_gt6',         label: '📐 Corners totales >6',       trust: 'medium', fn: m => (m.corners??0)+(m.corners_against??0) > 6 },
-  { id: 'corners_gt8',         label: '📐 Corners totales >8',       trust: 'medium', fn: m => (m.corners??0)+(m.corners_against??0) > 8 },
-  { id: 'fouls_gt10',          label: '🦶 Faltas >10',               trust: 'medium', fn: m => (m.fouls??0) > 10 },
-  { id: 'shots_on_gt3',        label: '🎯 Remates al arco >3',       trust: 'medium', fn: m => (m.shots_on_goal??0) > 3 },
-  { id: 'shots_total_gt8',     label: '🔫 Remates totales equipo >8',  trust: 'medium', fn: m => (m.shots_total??0) > 8 },
-  { id: 'shots_total_gt11',    label: '🔫 Remates totales equipo >11', trust: 'medium', fn: m => (m.shots_total??0) > 11 },
-  { id: 'shots_total_gt14',    label: '🔫 Remates totales equipo >14', trust: 'medium', fn: m => (m.shots_total??0) > 14 },
+  { id: 'yellow_1plus',        label: '🟡 Tarjeta amarilla (≥1)',       trust: 'high',   fn: m => (m.yellow_cards??0) >= 1 },
+  { id: 'yellow_2plus',        label: '🟡🟡 Tarjetas amarillas (≥2)',   trust: 'medium', fn: m => (m.yellow_cards??0) >= 2 },
+  { id: 'goals_1plus',         label: '⚽ Anota ≥1 gol',                trust: 'high',   fn: m => (m.goals_for??0) >= 1 },
+  { id: 'goals_2plus',         label: '⚽⚽ Anota ≥2 goles',            trust: 'high',   fn: m => (m.goals_for??0) >= 2 },
+  { id: 'clean_sheet',         label: '🧤 Valla invicta',               trust: 'high',   fn: m => (m.goals_against??99) === 0 },
+  { id: 'concede_1plus',       label: '🥅 Recibe ≥1 gol',              trust: 'high',   fn: m => (m.goals_against??0) >= 1 },
+  { id: 'corners_gt6',         label: '📐 Corners totales >6',          trust: 'medium', fn: m => (m.corners??0)+(m.corners_against??0) > 6 },
+  { id: 'corners_gt8',         label: '📐 Corners totales >8',          trust: 'medium', fn: m => (m.corners??0)+(m.corners_against??0) > 8 },
+  { id: 'fouls_gt10',          label: '🦶 Faltas >10',                  trust: 'medium', fn: m => (m.fouls??0) > 10 },
+  { id: 'shots_on_gt3',        label: '🎯 Remates al arco >3',          trust: 'medium', fn: m => (m.shots_on_goal??0) > 3 },
+  { id: 'shots_total_gt8',     label: '🔫 Remates totales equipo >8',   trust: 'medium', fn: m => (m.shots_total??0) > 8 },
+  { id: 'shots_total_gt11',    label: '🔫 Remates totales equipo >11',  trust: 'medium', fn: m => (m.shots_total??0) > 11 },
+  { id: 'shots_total_gt14',    label: '🔫 Remates totales equipo >14',  trust: 'medium', fn: m => (m.shots_total??0) > 14 },
+  // ⚠️ MERCADOS DE ALTO RIESGO — advertencia automática
+  { id: 'player_shots_WARN',   label: '⚠️ Remates jugador X (EVITAR)',  trust: 'low',    fn: m => false, warn: true },
+  { id: 'player_goals_WARN',   label: '⚠️ Goles jugador X (EVITAR)',    trust: 'low',    fn: m => false, warn: true },
 ];
 
 const TRUST_LABELS = {
@@ -2009,7 +2015,19 @@ function renderParlayPanel() {
     let statusHtml = '';
     let pctDisplay = '';
 
-    if (leg.loading) {
+    // ⚠️ Advertencia inmediata si seleccionó mercado de jugador individual
+    const selectedMarket = PARLAY_MARKETS.find(m => m.id === leg.market);
+    if (selectedMarket && selectedMarket.warn) {
+      statusHtml = `<div style="background:rgba(184,67,43,0.12);border:1px solid var(--card-red);border-radius:4px;padding:10px 12px;margin-top:8px;">
+        <div style="font-family:'Oswald',sans-serif;font-size:12px;font-weight:600;color:var(--card-red);margin-bottom:4px;">⚠️ MERCADO DE ALTO RIESGO — EVITAR</div>
+        <div style="font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--chalk-dim);line-height:1.6;">
+          Los remates/goles de jugadores específicos destruyen parlays incluso cuando el equipo gana.<br>
+          <strong>Ejemplo real:</strong> Japón ganó 4-0 vs Túnez pero Nakamura y Doan no remataron al arco.<br>
+          <strong>Reemplazá por:</strong> Remates totales del equipo, tarjetas totales del partido, ambos anotan.
+        </div>
+      </div>`;
+      pctDisplay = '';
+    } else if (leg.loading) {
       statusHtml = `<span style="color:var(--chalk-faint);font-size:12px;">Cargando...</span>`;
     } else if (leg.error) {
       statusHtml = `<span style="color:var(--card-red);font-size:12px;">⚠ ${escapeHtml(leg.error)}</span>`;
@@ -2280,8 +2298,218 @@ function renderParlaySummary(legs) {
     </div>`;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CUOTAS EN VIVO — The Odds API (+70 casas de apuestas mundiales)
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function loadRefereeForMatch(ev) {
+  // Busca el árbitro en los upcoming matches de football-data.org
+  // y luego busca sus estadísticas en nuestra base de datos
+  const divId = `ref-${(ev.id || ev.home_team.replace(/\s/g,'')).toString()}`;
+  const div = document.getElementById(divId);
+  if (!div) return;
+
+  try {
+    // Buscar el partido en football-data.org para obtener el árbitro
+    // Intentamos con el endpoint de upcoming del Mundial (WC)
+    const upcoming = await apiFetch('/api/upcoming/WC?limit=20');
+    const matches = upcoming.matches || [];
+
+    // Buscar el partido por nombre de equipos (aproximado)
+    const homeLower = ev.home_team.toLowerCase();
+    const awayLower = ev.away_team.toLowerCase();
+    const match = matches.find(m =>
+      (m.homeTeam.toLowerCase().includes(homeLower.split(' ')[0]) ||
+       homeLower.includes(m.homeTeam.toLowerCase().split(' ')[0])) &&
+      (m.awayTeam.toLowerCase().includes(awayLower.split(' ')[0]) ||
+       awayLower.includes(m.awayTeam.toLowerCase().split(' ')[0]))
+    );
+
+    // Si no encontramos el partido o no tiene árbitro, no mostramos nada
+    if (!match || !match.referee) return;
+
+    const refName = match.referee;
+    // Buscar en nuestra base de datos
+    const refData = await apiFetch('/api/referee/lookup?name=' + encodeURIComponent(refName));
+
+    if (!refData.found) {
+      div.innerHTML = `
+        <div style="font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--chalk-faint);padding:6px 8px;background:var(--field-panel-raised);border-radius:3px;">
+          ⚖️ Árbitro: <strong>${escapeHtml(refName)}</strong> — sin estadísticas en nuestra base de datos
+          <a href="${escapeHtml(refData.url || '')}" target="_blank" style="color:var(--amber);margin-left:6px;">ver en kickoffscore →</a>
+        </div>`;
+      return;
+    }
+
+    const ref = refData.referee;
+    const rec = refData.cards_threshold_35;
+    const styleColor = ref.style === 'estricto' ? 'var(--card-red)' :
+                       ref.style === 'activo'    ? 'var(--amber)' : 'var(--grass)';
+
+    div.innerHTML = `
+      <div style="background:var(--field-panel-raised);border:1px solid var(--field-line);border-radius:3px;padding:8px 12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+          <div>
+            <span style="font-size:11px;color:var(--chalk-faint);font-family:'JetBrains Mono',monospace;">⚖️ ÁRBITRO</span>
+            <span style="font-size:13px;font-weight:600;margin-left:6px;">${escapeHtml(ref.name)}</span>
+            <span style="font-size:11px;color:var(--chalk-faint);margin-left:4px;">(${escapeHtml(ref.country)})</span>
+          </div>
+          <div style="display:flex;gap:10px;font-family:'JetBrains Mono',monospace;font-size:11px;">
+            <span>🟡 <strong style="color:var(--card-yellow)">${ref.yellows_per_game}</strong> amarillas/partido</span>
+            <span>🟥 <strong style="color:var(--card-red)">${ref.reds_per_game}</strong> rojas/partido</span>
+          </div>
+        </div>
+        <div style="margin-top:5px;font-size:11px;font-family:'JetBrains Mono',monospace;">
+          <span style="color:${styleColor}">${escapeHtml(ref.style_label)}</span>
+        </div>
+        <div style="margin-top:4px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--chalk-dim);">
+          ${escapeHtml(rec.recommendation)} · ${escapeHtml(ref.cards_market_note)}
+        </div>
+      </div>`;
+
+  } catch(e) {
+    // Silencioso — si falla la búsqueda del árbitro no rompemos la UI
+  }
+}
+  const panel = document.getElementById('panel-odds');
+  const code = competitionSelect.value;
+  panel.innerHTML = loadingBox('cargando cuotas en vivo de +70 casas...');
+
+  try {
+    const status = await apiFetch('/api/odds/status');
+    if (!status.configured) {
+      panel.innerHTML = `
+        <div class="error-box">
+          <div class="err-title">The Odds API no configurada</div>
+          ${escapeHtml(status.message)}<br><br>
+          Pasos: 1. Registrate gratis en <strong>the-odds-api.com</strong> · 2. Copiá tu API key · 3. En Render → Environment → <code>ODDS_API_KEY=tu_key</code> · 4. Redeploy
+        </div>`;
+      return;
+    }
+
+    const [oddsData, valueData] = await Promise.allSettled([
+      apiFetch('/api/odds/' + code),
+      apiFetch('/api/value-analysis/' + code),
+    ]);
+
+    const odds  = oddsData.status  === 'fulfilled' ? oddsData.value  : null;
+    const value = valueData.status === 'fulfilled' ? valueData.value : null;
+
+    if (!odds || !odds.events || !odds.events.length) {
+      panel.innerHTML = `<div class="empty-state"><i class="ti ti-calendar-off"></i>No hay partidos con cuotas disponibles para esta competición ahora mismo.</div>`;
+      return;
+    }
+
+    const valueMap = {};
+    if (value && value.results) {
+      for (const r of value.results) valueMap[r.match] = r;
+    }
+
+    function americanToProb(o) {
+      if (!o && o !== 0) return null;
+      return o > 0 ? Math.round(100/(o+100)*100) : Math.round(Math.abs(o)/(Math.abs(o)+100)*100);
+    }
+    function probColor(p) {
+      if (!p) return 'var(--chalk-faint)';
+      return p >= 70 ? 'var(--grass)' : p >= 50 ? 'var(--amber)' : 'var(--card-red)';
+    }
+    function formatOdds(o) {
+      if (!o && o !== 0) return '—';
+      return o > 0 ? '+'+o : String(o);
+    }
+    function oddsColor(o) {
+      if (!o && o !== 0) return 'var(--chalk-faint)';
+      return o > 0 ? 'var(--grass)' : 'var(--chalk)';
+    }
+
+    let html = `
+      <div class="section-label">📊 Cuotas en vivo — ${escapeHtml(code)} · ${odds.matches_found} partidos · ${escapeHtml(status.requests_remaining||'?')} requests restantes del mes</div>
+      <div style="font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--chalk-faint);margin-bottom:16px;">
+        Consenso de +49 casas internacionales · Formato americano · Las probabilidades incluyen el margen de la casa (~5-8%)
+      </div>
+
+      <div style="background:rgba(184,67,43,0.08);border:1px solid var(--card-red);border-radius:4px;padding:12px 16px;margin-bottom:20px;">
+        <div style="font-family:'Oswald',sans-serif;font-size:12px;font-weight:600;color:var(--card-red);margin-bottom:6px;">⚠️ MERCADOS A EVITAR — aprendido de tickets perdidos</div>
+        <div style="font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--chalk-dim);line-height:1.8;">
+          ❌ <strong>Remates/goles de jugador específico</strong> — aunque el equipo gane, ese jugador puede no ser el protagonista (Nakamura, Doan, Olise, Kane, Enciso fallaron)<br>
+          ❌ <strong>Más de 1.5 goles cuando el rival puede defender bajo</strong> — Bélgica 0-0 Irán, Inglaterra 0-0 Ghana<br>
+          ❌ <strong>"Empate o favorito" con rival ya eliminado</strong> — sin presión, el rival juega suelto<br>
+          ✅ <strong>Preferir:</strong> Tarjetas totales · Ambos anotan · Remates totales del equipo · Favorito claro con cuota razonable
+        </div>
+      </div>`;
+
+    for (const ev of odds.events) {
+      const vd = valueMap[`${ev.home_team} vs ${ev.away_team}`];
+      const h2h  = ev.consensus_odds?.h2h?.outcomes  || {};
+      const tots = ev.consensus_odds?.totals?.outcomes || {};
+      const recs = vd?.recommendations || [];
+      const warns = (vd?.warnings || []).filter(w => w.type !== 'jugador_individual');
+
+      const fecha = ev.commence_time
+        ? new Date(ev.commence_time).toLocaleString('es', {weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})
+        : '';
+
+      const homeP = americanToProb(h2h[ev.home_team]);
+      const awayP = americanToProb(h2h[ev.away_team]);
+      const drawP = americanToProb(h2h['Draw']);
+
+      html += `
+        <div style="background:var(--field-panel);border:1px solid var(--field-line);border-radius:4px;padding:16px;margin-bottom:14px;">
+          <div style="font-family:'Oswald',sans-serif;font-size:17px;font-weight:600;margin-bottom:2px;">
+            ${escapeHtml(ev.home_team)} <span style="color:var(--chalk-faint);font-size:13px">vs</span> ${escapeHtml(ev.away_team)}
+          </div>
+          <div style="font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--chalk-faint);margin-bottom:12px;">${escapeHtml(fecha)} · ${ev.bookmakers_count} casas</div>
+
+          <div id="ref-${ev.id || ev.home_team.replace(/\s/g,'')}" style="margin-bottom:10px;"></div>grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">
+            ${[[ev.home_team, h2h[ev.home_team], homeP],['Empate',h2h['Draw'],drawP],[ev.away_team,h2h[ev.away_team],awayP]].map(([n,o,p])=>`
+              <div style="background:var(--field-panel-raised);border:1px solid var(--field-line);border-radius:3px;padding:10px;text-align:center;">
+                <div style="font-size:10px;color:var(--chalk-faint);margin-bottom:3px;font-family:'JetBrains Mono',monospace;">${escapeHtml(n)}</div>
+                <div style="font-size:18px;font-weight:700;color:${oddsColor(o)}">${formatOdds(o)}</div>
+                <div style="font-size:10px;color:${probColor(p)};font-family:'JetBrains Mono',monospace;">${p??'—'}% prob.</div>
+              </div>`).join('')}
+          </div>
+
+          ${Object.keys(tots).length ? `
+          <div style="margin-bottom:10px;">
+            <div style="font-size:10px;color:var(--chalk-faint);font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px;">Goles totales del partido</div>
+            <div style="display:flex;flex-wrap:wrap;gap:5px;">
+              ${Object.entries(tots).slice(0,6).map(([lbl,price])=>{
+                const p=americanToProb(price);
+                return `<div style="background:var(--field-panel-raised);border:1px solid var(--field-line);border-radius:3px;padding:5px 9px;font-family:'JetBrains Mono',monospace;font-size:11px;">
+                  <span style="color:var(--chalk-dim)">${escapeHtml(lbl)}</span>
+                  <span style="font-weight:600;color:${oddsColor(price)};margin-left:5px">${formatOdds(price)}</span>
+                  <span style="color:${probColor(p)};font-size:9px;margin-left:3px">(${p??'—'}%)</span>
+                </div>`;
+              }).join('')}
+            </div>
+          </div>` : ''}
+
+          ${recs.length ? `
+          <div style="background:var(--grass-dim);border:1px solid var(--grass);border-radius:3px;padding:9px 12px;margin-bottom:6px;">
+            <div style="font-family:'Oswald',sans-serif;font-size:11px;font-weight:600;color:var(--grass);margin-bottom:3px;">✅ RECOMENDADOS PARA PARLAY</div>
+            ${recs.map(r=>`<div style="font-size:11px;font-family:'JetBrains Mono',monospace;">· <strong>${escapeHtml(r.market)}</strong> — ${r.implied_prob}% prob. implícita</div>`).join('')}
+          </div>` : ''}
+
+          ${warns.length ? `<div style="font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--amber);">${warns.map(w=>`⚠️ ${escapeHtml(w.message)}`).join('<br>')}</div>` : ''}
+        </div>`;
+    }
+
+    html += `<div style="font-size:10px;color:var(--chalk-faint);font-family:'JetBrains Mono',monospace;margin-top:6px;">Fuente: The Odds API · Para tarjetas/remates usá "Remates &amp; tarjetas" combinado con estas cuotas.</div>`;
+    panel.innerHTML = html;
+
+    // Cargar árbitros en background para cada partido
+    for (const ev of odds.events) {
+      loadRefereeForMatch(ev);
+    }
+
+  } catch(err) {
+    panel.innerHTML = errorBox('No se pudieron cargar las cuotas', err.message);
+  }
+}
+
 init();
 </script>
+
 
 
 </body></html>

@@ -605,7 +605,7 @@ def get_odds(code):
             "error": f"Competición '{code}' no soportada para cuotas. Soportadas: {supported}"
         }), 400
 
-    markets = request.args.get("markets", "h2h,totals,btts")
+    markets = request.args.get("markets", "h2h,totals")
     bookmakers = request.args.get("bookmakers", "")
     team_filter = request.args.get("team", "").lower().strip()
 
@@ -669,7 +669,7 @@ def get_odds(code):
 
         # Calcular el promedio de cuotas entre todas las casas (consensus odds)
         consensus = {}
-        for mkt_key in ["h2h", "totals", "btts"]:
+        for mkt_key in ["h2h", "totals"]:
             all_outcomes = {}
             count = 0
             for bk in bookmaker_odds:
@@ -769,7 +769,7 @@ def value_analysis(code):
     params = {
         "apiKey": ODDS_API_KEY,
         "regions": "us,eu,uk",
-        "markets": "h2h,totals,btts",
+        "markets": "h2h,totals",
         "oddsFormat": "american",
         "dateFormat": "iso",
     }

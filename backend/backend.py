@@ -552,6 +552,353 @@ def distribution(code):
     return jsonify(result)
 
 
+# ----------------------------------------------------------------------------
+# The Odds API — cuotas en tiempo real de +70 casas de apuestas
+# Requiere variable de entorno ODDS_API_KEY (gratis en the-odds-api.com)
+# ----------------------------------------------------------------------------
+
+ODDS_API_KEY = os.environ.get("ODDS_API_KEY", "")
+ODDS_BASE_URL = "https://api.the-odds-api.com/v4"
+
+# Mapeo de códigos internos a sport keys de The Odds API
+ODDS_SPORT_MAP = {
+    "WC":  "soccer_fifa_world_cup",
+    "EC":  "soccer_uefa_euro",
+    "CL":  "soccer_uefa_champs_league",
+    "PL":  "soccer_epl",
+    "PD":  "soccer_spain_la_liga",
+    "SA":  "soccer_italy_serie_a",
+    "BL1": "soccer_germany_bundesliga",
+    "FL1": "soccer_france_ligue_one",
+}
+
+# Mercados soportados por The Odds API que mapeamos a nombres legibles
+ODDS_MARKETS = {
+    "h2h":       "Resultado 1X2",
+    "totals":    "Over/Under goles",
+    "btts":      "Ambos equipos anotan",
+}
+
+
+@app.route("/api/odds/<code>", methods=["GET"])
+def get_odds(code):
+    """
+    Devuelve cuotas en tiempo real para los próximos partidos de una competición.
+    Requiere ODDS_API_KEY configurada (gratis en the-odds-api.com, 500 req/mes).
+
+    Parámetros opcionales:
+      ?markets=h2h,totals,btts   (default: h2h,totals,btts)
+      ?bookmakers=draftkings,betmgm  (default: todos)
+      ?team=Arsenal              (filtra por equipo)
+    """
+    if not ODDS_API_KEY:
+        return jsonify({
+            "error": "Falta configurar ODDS_API_KEY. Registrate gratis en the-odds-api.com y agregá la variable de entorno.",
+            "url": "https://the-odds-api.com"
+        }), 503
+
+    code = code.upper()
+    sport_key = ODDS_SPORT_MAP.get(code)
+    if not sport_key:
+        supported = ", ".join(ODDS_SPORT_MAP.keys())
+        return jsonify({
+            "error": f"Competición '{code}' no soportada para cuotas. Soportadas: {supported}"
+        }), 400
+
+    markets = request.args.get("markets", "h2h,totals,btts")
+    bookmakers = request.args.get("bookmakers", "")
+    team_filter = request.args.get("team", "").lower().strip()
+
+    params = {
+        "apiKey": ODDS_API_KEY,
+        "regions": "us,eu,uk",
+        "markets": markets,
+        "oddsFormat": "american",
+        "dateFormat": "iso",
+    }
+    if bookmakers:
+        params["bookmakers"] = bookmakers
+
+    cache_key = f"odds::{sport_key}::{markets}"
+    cached = _cache_get(cache_key, ttl=120)  # cache 2 min para cuotas
+    if cached is not None:
+        data = cached
+    else:
+        try:
+            resp = requests.get(
+                f"{ODDS_BASE_URL}/sports/{sport_key}/odds",
+                params=params,
+                timeout=10
+            )
+            if resp.status_code == 401:
+                return jsonify({"error": "ODDS_API_KEY inválida."}), 401
+            if resp.status_code == 422:
+                return jsonify({"error": "Parámetros inválidos para The Odds API."}), 422
+            if resp.status_code != 200:
+                return jsonify({"error": f"Error de The Odds API: {resp.status_code}"}), 502
+            data = resp.json()
+            _cache_set(cache_key, data)
+        except requests.RequestException as e:
+            return jsonify({"error": f"Error de conexión con The Odds API: {e}"}), 502
+
+    # Filtrar por equipo si se pidió
+    if team_filter:
+        data = [
+            ev for ev in data
+            if team_filter in ev.get("home_team", "").lower()
+            or team_filter in ev.get("away_team", "").lower()
+        ]
+
+    # Serializar y simplificar la respuesta
+    events = []
+    for ev in data:
+        bookmaker_odds = []
+        for bk in ev.get("bookmakers", []):
+            markets_data = {}
+            for mkt in bk.get("markets", []):
+                key = mkt["key"]
+                outcomes = {o["name"]: o["price"] for o in mkt.get("outcomes", [])}
+                markets_data[key] = {
+                    "label": ODDS_MARKETS.get(key, key),
+                    "outcomes": outcomes
+                }
+            bookmaker_odds.append({
+                "bookmaker": bk["title"],
+                "markets": markets_data
+            })
+
+        # Calcular el promedio de cuotas entre todas las casas (consensus odds)
+        consensus = {}
+        for mkt_key in ["h2h", "totals", "btts"]:
+            all_outcomes = {}
+            count = 0
+            for bk in bookmaker_odds:
+                mkt = bk["markets"].get(mkt_key, {})
+                for outcome, price in mkt.get("outcomes", {}).items():
+                    all_outcomes.setdefault(outcome, []).append(price)
+                    count += 1
+            if all_outcomes:
+                consensus[mkt_key] = {
+                    "label": ODDS_MARKETS.get(mkt_key, mkt_key),
+                    "outcomes": {
+                        k: round(sum(v) / len(v))
+                        for k, v in all_outcomes.items()
+                    }
+                }
+
+        events.append({
+            "match": f"{ev['home_team']} vs {ev['away_team']}",
+            "home_team": ev["home_team"],
+            "away_team": ev["away_team"],
+            "commence_time": ev.get("commence_time"),
+            "sport": ev.get("sport_title"),
+            "consensus_odds": consensus,
+            "bookmakers": bookmaker_odds,
+            "bookmakers_count": len(bookmaker_odds),
+        })
+
+    # Ordenar por fecha
+    events.sort(key=lambda e: e.get("commence_time") or "")
+
+    return jsonify({
+        "competition": ODDS_SPORT_MAP.get(code, code),
+        "matches_found": len(events),
+        "team_filter": team_filter or None,
+        "events": events,
+        "note": "Cuotas en formato americano. Consenso = promedio entre todas las casas disponibles."
+    })
+
+
+@app.route("/api/odds/status", methods=["GET"])
+def odds_status():
+    """Verifica si The Odds API está configurada y devuelve los créditos restantes."""
+    if not ODDS_API_KEY:
+        return jsonify({
+            "configured": False,
+            "message": "Falta ODDS_API_KEY. Registrate gratis en the-odds-api.com"
+        })
+    try:
+        resp = requests.get(
+            f"{ODDS_BASE_URL}/sports",
+            params={"apiKey": ODDS_API_KEY},
+            timeout=8
+        )
+        remaining = resp.headers.get("x-requests-remaining", "?")
+        used = resp.headers.get("x-requests-used", "?")
+        if resp.status_code == 200:
+            return jsonify({
+                "configured": True,
+                "requests_remaining": remaining,
+                "requests_used": used,
+                "message": f"The Odds API conectada. Requests restantes: {remaining}/500"
+            })
+        return jsonify({
+            "configured": False,
+            "message": f"Key inválida o error: {resp.status_code}"
+        })
+    except Exception as e:
+        return jsonify({"configured": False, "message": str(e)})
+
+
+# ----------------------------------------------------------------------------
+# Análisis de valor: cruza cuotas de la casa con historial de Pizarra
+# ----------------------------------------------------------------------------
+
+@app.route("/api/value-analysis/<code>", methods=["GET"])
+def value_analysis(code):
+    """
+    Cruza las cuotas de The Odds API con el análisis histórico de Pizarra.
+    Devuelve para cada partido los mercados con mejor 'valor' real vs cuota.
+
+    Parámetros:
+      ?team=Ecuador   (analiza un equipo específico)
+    """
+    if not ODDS_API_KEY:
+        return jsonify({
+            "error": "Falta ODDS_API_KEY para este endpoint."
+        }), 503
+
+    # Primero traemos las cuotas
+    code_upper = code.upper()
+    sport_key = ODDS_SPORT_MAP.get(code_upper)
+    if not sport_key:
+        return jsonify({"error": f"Competición '{code_upper}' no soportada."}), 400
+
+    team = request.args.get("team", "").strip()
+
+    params = {
+        "apiKey": ODDS_API_KEY,
+        "regions": "us,eu,uk",
+        "markets": "h2h,totals,btts",
+        "oddsFormat": "american",
+        "dateFormat": "iso",
+    }
+    try:
+        resp = requests.get(
+            f"{ODDS_BASE_URL}/sports/{sport_key}/odds",
+            params=params,
+            timeout=10
+        )
+        if resp.status_code != 200:
+            return jsonify({"error": f"Error de The Odds API: {resp.status_code}"}), 502
+        events = resp.json()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
+
+    if team:
+        tl = team.lower()
+        events = [
+            ev for ev in events
+            if tl in ev.get("home_team", "").lower()
+            or tl in ev.get("away_team", "").lower()
+        ]
+
+    def american_to_prob(odds):
+        """Convierte cuota americana a probabilidad implícita."""
+        if odds is None:
+            return None
+        if odds > 0:
+            return round(100 / (odds + 100) * 100, 1)
+        else:
+            return round(abs(odds) / (abs(odds) + 100) * 100, 1)
+
+    results = []
+    for ev in events[:10]:  # max 10 partidos para no sobrecargar
+        home = ev.get("home_team")
+        away = ev.get("away_team")
+
+        # Calcular probabilidades implícitas del consenso de casas
+        mkt_h2h = {}
+        mkt_totals = {}
+        mkt_btts = {}
+
+        for bk in ev.get("bookmakers", []):
+            for mkt in bk.get("markets", []):
+                if mkt["key"] == "h2h":
+                    for o in mkt.get("outcomes", []):
+                        mkt_h2h.setdefault(o["name"], []).append(o["price"])
+                elif mkt["key"] == "totals":
+                    for o in mkt.get("outcomes", []):
+                        label = f"{o['name']} {o.get('point', '')}"
+                        mkt_totals.setdefault(label, []).append(o["price"])
+                elif mkt["key"] == "btts":
+                    for o in mkt.get("outcomes", []):
+                        mkt_btts.setdefault(o["name"], []).append(o["price"])
+
+        def avg_odds(d):
+            return {k: round(sum(v)/len(v)) for k, v in d.items()}
+
+        def odds_to_probs(d):
+            return {k: american_to_prob(v) for k, v in avg_odds(d).items()}
+
+        # Advertencias de mercados a evitar
+        warnings = []
+        recommendations = []
+
+        h2h_probs = odds_to_probs(mkt_h2h)
+        totals_probs = odds_to_probs(mkt_totals)
+        btts_probs = odds_to_probs(mkt_btts)
+
+        # Regla 1: si ambos anotan tiene prob >65% → recomendado
+        btts_yes = btts_probs.get("Yes", 0) or 0
+        if btts_yes >= 65:
+            recommendations.append({
+                "market": "Ambos equipos anotan — Sí",
+                "implied_prob": btts_yes,
+                "note": "Alta probabilidad según consenso de casas"
+            })
+
+        # Regla 2: over 2.5 con prob >60% → recomendado
+        for label, prob in totals_probs.items():
+            if "Over" in label and prob and prob >= 60:
+                recommendations.append({
+                    "market": f"Más de {label.replace('Over ', '')} goles",
+                    "implied_prob": prob,
+                    "note": "La mayoría de las casas lo ven probable"
+                })
+
+        # Advertencia: NO apostar a jugadores individuales
+        warnings.append({
+            "type": "jugador_individual",
+            "message": "⚠️ Evitá mercados de remates/goles de jugadores específicos — alta varianza, destruyen parlays aunque el equipo gane"
+        })
+
+        # Advertencia: si el favorito tiene prob >80% la cuota paga muy poco
+        for team_name, prob in h2h_probs.items():
+            if prob and prob >= 80:
+                warnings.append({
+                    "type": "favorito_extremo",
+                    "message": f"⚠️ {team_name} tiene {prob}% probabilidad implícita — cuota muy baja, poco valor en parlay"
+                })
+
+        results.append({
+            "match": f"{home} vs {away}",
+            "home_team": home,
+            "away_team": away,
+            "commence_time": ev.get("commence_time"),
+            "implied_probabilities": {
+                "h2h": h2h_probs,
+                "totals": totals_probs,
+                "btts": btts_probs,
+            },
+            "recommendations": recommendations,
+            "warnings": warnings,
+            "bookmakers_count": len(ev.get("bookmakers", [])),
+        })
+
+    return jsonify({
+        "competition": code_upper,
+        "team_filter": team or None,
+        "matches_analyzed": len(results),
+        "results": results,
+        "meta": {
+            "note": "Las probabilidades implícitas incluyen el margen de la casa (~5-8%). La probabilidad real es algo mayor.",
+            "avoid": "Remates/goles de jugadores individuales específicos — mercado de altísima varianza",
+            "prefer": "Ambos anotan, Over/Under goles totales, Total tarjetas con árbitro conocido"
+        }
+    })
+
+
 @app.route("/", methods=["GET"])
 def index():
     return jsonify({

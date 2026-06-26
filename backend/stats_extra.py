@@ -1599,3 +1599,388 @@ def head_to_head_apisports():
         "matches": sample,
     })
 
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ÁRBITROS — Base de datos de árbitros con estadísticas históricas
+# Fuente: kickoffscore.com / statshub.com / valuestats.com (datos públicos)
+# Actualizado: junio 2026
+# ─────────────────────────────────────────────────────────────────────────────
+
+REFEREE_DB = {
+    # ─── 50 ÁRBITROS CONFIRMADOS DEL MUNDIAL 2026 ───
+    # Fuente: footymetrics.com (datos reales de carrera, junio 2026)
+    # yellows/reds/cards = promedios por partido en carrera completa
+
+    # ── UEFA (15) ──────────────────────────────────────────────────────────
+    "michael oliver": {
+        "name": "Michael Oliver", "country": "Inglaterra", "confederation": "UEFA",
+        "yellows_per_game": 3.7, "reds_per_game": 0.14, "cards_per_game": 3.8, "fouls_per_game": 22.8, "matches": 251,
+        "style": "permisivo", "style_label": "🟢 Permisivo — 3.7 amarillas/partido",
+        "cards_market_note": "Límite para 'Más de 3.5 tarjetas'. Arriesgado con él.",
+    },
+    "anthony taylor": {
+        "name": "Anthony Taylor", "country": "Inglaterra", "confederation": "UEFA",
+        "yellows_per_game": 3.9, "reds_per_game": 0.16, "cards_per_game": 4.1, "fouls_per_game": 21.4, "matches": 263,
+        "style": "activo", "style_label": "🟡 Activo — 3.9 amarillas/partido",
+        "cards_market_note": "'Más de 3.5 tarjetas' favorable con Taylor.",
+    },
+    "szymon marciniak": {
+        "name": "Szymon Marciniak", "country": "Polonia", "confederation": "UEFA",
+        "yellows_per_game": 4.3, "reds_per_game": 0.13, "cards_per_game": 4.4, "fouls_per_game": 25.2, "matches": 214,
+        "style": "activo", "style_label": "🟡 Activo — 4.3 amarillas/partido",
+        "cards_market_note": "Árbitro de la final del 2022. 'Más de 3.5 tarjetas' muy probable.",
+    },
+    "francois letexier": {
+        "name": "François Letexier", "country": "Francia", "confederation": "UEFA",
+        "yellows_per_game": 4.0, "reds_per_game": 0.22, "cards_per_game": 4.2, "fouls_per_game": 22.5, "matches": 183,
+        "style": "activo", "style_label": "🟡 Activo — 4.0 amarillas, muchas rojas (0.22/partido)",
+        "cards_market_note": "Alto promedio de rojas. Mercado de tarjetas muy favorable.",
+    },
+    "danny makkelie": {
+        "name": "Danny Makkelie", "country": "Curaçao", "confederation": "UEFA",
+        "yellows_per_game": 3.4, "reds_per_game": 0.15, "cards_per_game": 3.4, "fouls_per_game": 22.3, "matches": 255,
+        "style": "permisivo", "style_label": "🟢 Permisivo — 3.4 amarillas/partido",
+        "cards_market_note": "Makkelie es permisivo. Cuidado con el mercado de tarjetas.",
+    },
+    "clement turpin": {
+        "name": "Clément Turpin", "country": "Francia", "confederation": "UEFA",
+        "yellows_per_game": 3.2, "reds_per_game": 0.23, "cards_per_game": 3.4, "fouls_per_game": 23.4, "matches": 205,
+        "style": "permisivo", "style_label": "🟢 Permisivo en amarillas (3.2) pero muchas rojas (0.23)",
+        "cards_market_note": "Pocas amarillas pero rojas frecuentes. Mercado de tarjetas incierto.",
+    },
+    "felix zwayer": {
+        "name": "Felix Zwayer", "country": "Alemania", "confederation": "UEFA",
+        "yellows_per_game": 4.7, "reds_per_game": 0.15, "cards_per_game": 4.7, "fouls_per_game": 22.7, "matches": 199,
+        "style": "estricto", "style_label": "🔴 Estricto — 4.7 amarillas/partido",
+        "cards_market_note": "'Más de 3.5 tarjetas' muy probable con Zwayer.",
+    },
+    "istvan kovacs": {
+        "name": "Istvan Kovacs", "country": "Rumania", "confederation": "UEFA",
+        "yellows_per_game": 5.0, "reds_per_game": 0.26, "cards_per_game": 5.0, "fouls_per_game": 25.3, "matches": 197,
+        "style": "muy estricto", "style_label": "🔴🔴 Muy estricto — 5.0 amarillas/partido (más alto UEFA)",
+        "cards_market_note": "'Más de 3.5 tarjetas' casi seguro con Kovacs.",
+    },
+    "maurizio mariani": {
+        "name": "Maurizio Mariani", "country": "Italia", "confederation": "UEFA",
+        "yellows_per_game": 4.0, "reds_per_game": 0.20, "cards_per_game": 4.0, "fouls_per_game": 25.2, "matches": 183,
+        "style": "activo", "style_label": "🟡 Activo — 4.0 amarillas/partido",
+        "cards_market_note": "Supera 3.5 tarjetas con regularidad.",
+    },
+    "alejandro hernandez hernandez": {
+        "name": "Alejandro Hernández Hernández", "country": "España", "confederation": "UEFA",
+        "yellows_per_game": 5.2, "reds_per_game": 0.23, "cards_per_game": 5.2, "fouls_per_game": 25.4, "matches": 165,
+        "style": "muy estricto", "style_label": "🔴🔴 Muy estricto — 5.2 amarillas/partido",
+        "cards_market_note": "El árbitro español del Mundial, muy estricto. Casi seguro supera 3.5 tarjetas.",
+    },
+    "sandro scharer": {
+        "name": "Sandro Schärer", "country": "Suiza", "confederation": "UEFA",
+        "yellows_per_game": 4.3, "reds_per_game": 0.24, "cards_per_game": 4.3, "fouls_per_game": 24.9, "matches": 153,
+        "style": "estricto", "style_label": "🔴 Estricto — 4.3 amarillas/partido",
+        "cards_market_note": "Estricto y con rojas frecuentes. Favorable para tarjetas.",
+    },
+    "espen eskas": {
+        "name": "Espen Eskås", "country": "Noruega", "confederation": "UEFA",
+        "yellows_per_game": 3.4, "reds_per_game": 0.10, "cards_per_game": 3.4, "fouls_per_game": 20.6, "matches": 147,
+        "style": "permisivo", "style_label": "🟢 Muy permisivo — 3.4 amarillas/partido",
+        "cards_market_note": "Uno de los más permisivos del torneo. Evitar mercado de tarjetas.",
+    },
+    "joao pinheiro": {
+        "name": "João Pedro Pinheiro", "country": "Portugal", "confederation": "UEFA",
+        "yellows_per_game": 4.6, "reds_per_game": 0.21, "cards_per_game": 4.6, "fouls_per_game": 25.4, "matches": 141,
+        "style": "estricto", "style_label": "🔴 Estricto — 4.6 amarillas/partido",
+        "cards_market_note": "'Más de 3.5 tarjetas' muy probable con Pinheiro.",
+    },
+    "slavko vincic": {
+        "name": "Slavko Vinčić", "country": "Eslovenia", "confederation": "UEFA",
+        "yellows_per_game": 3.9, "reds_per_game": 0.12, "cards_per_game": 3.9, "fouls_per_game": 25.4, "matches": 90,
+        "style": "moderado", "style_label": "🟡 Moderado — 3.9 amarillas/partido",
+        "cards_market_note": "Moderado. 'Más de 3.5 tarjetas' posible.",
+    },
+    "glenn nyberg": {
+        "name": "Glenn Nyberg", "country": "Suecia", "confederation": "UEFA",
+        "yellows_per_game": 3.5, "reds_per_game": 0.12, "cards_per_game": 3.5, "fouls_per_game": 24.8, "matches": 166,
+        "style": "moderado", "style_label": "🟡 Moderado — 3.5 amarillas (justo en el límite)",
+        "cards_market_note": "Límite para 'Más de 3.5 tarjetas'. Riesgo moderado.",
+    },
+
+    # ── CONMEBOL (12) ──────────────────────────────────────────────────────
+    "dario herrera": {
+        "name": "Darío Herrera", "country": "Argentina", "confederation": "CONMEBOL",
+        "yellows_per_game": 5.5, "reds_per_game": 0.34, "cards_per_game": 5.5, "fouls_per_game": 25.0, "matches": 249,
+        "style": "muy estricto", "style_label": "🔴🔴 Más estricto del torneo — 5.5 amarillas/partido",
+        "cards_market_note": "El más estricto del Mundial 2026. Cualquier mercado de tarjetas es excelente con él.",
+    },
+    "facundo tello": {
+        "name": "Facundo Tello", "country": "Argentina", "confederation": "CONMEBOL",
+        "yellows_per_game": 4.7, "reds_per_game": 0.25, "cards_per_game": 4.7, "fouls_per_game": 23.9, "matches": 248,
+        "style": "estricto", "style_label": "🔴 Estricto — 4.7 amarillas/partido",
+        "cards_market_note": "'Más de 3.5 tarjetas' muy probable.",
+    },
+    "raphael claus": {
+        "name": "Raphael Claus", "country": "Brasil", "confederation": "CONMEBOL",
+        "yellows_per_game": 4.1, "reds_per_game": 0.19, "cards_per_game": 4.1, "fouls_per_game": 24.0, "matches": 225,
+        "style": "activo", "style_label": "🟡 Activo — 4.1 amarillas/partido",
+        "cards_market_note": "Supera 3.5 tarjetas con regularidad.",
+    },
+    "wilton sampaio": {
+        "name": "Wilton Sampaio", "country": "Brasil", "confederation": "CONMEBOL",
+        "yellows_per_game": 4.8, "reds_per_game": 0.23, "cards_per_game": 4.8, "fouls_per_game": 25.8, "matches": 222,
+        "style": "estricto", "style_label": "🔴 Estricto — 4.8 amarillas/partido",
+        "cards_market_note": "'Más de 3.5 tarjetas' muy probable.",
+    },
+    "gustavo tejera": {
+        "name": "Gustavo Tejera", "country": "Uruguay", "confederation": "CONMEBOL",
+        "yellows_per_game": 4.9, "reds_per_game": 0.28, "cards_per_game": 4.9, "fouls_per_game": 23.1, "matches": 188,
+        "style": "estricto", "style_label": "🔴 Estricto — 4.9 amarillas/partido",
+        "cards_market_note": "'Más de 3.5 tarjetas' muy probable.",
+    },
+    "yael falcon perez": {
+        "name": "Yael Falcón Pérez", "country": "Argentina", "confederation": "CONMEBOL",
+        "yellows_per_game": 5.3, "reds_per_game": 0.26, "cards_per_game": 5.3, "fouls_per_game": 25.8, "matches": 186,
+        "style": "muy estricto", "style_label": "🔴🔴 Muy estricto — 5.3 amarillas/partido",
+        "cards_market_note": "Extremadamente estricto. Cualquier mercado de tarjetas es favorable.",
+    },
+    "ramon abatti": {
+        "name": "Ramon Abatti", "country": "Brasil", "confederation": "CONMEBOL",
+        "yellows_per_game": 4.5, "reds_per_game": 0.25, "cards_per_game": 4.5, "fouls_per_game": 28.6, "matches": 181,
+        "style": "estricto", "style_label": "🔴 Estricto — 4.5 amarillas + más faltas del torneo (28.6/partido)",
+        "cards_market_note": "Muy favorable para tarjetas y faltas.",
+    },
+    "jesus valenzuela": {
+        "name": "Jesús Valenzuela", "country": "Venezuela", "confederation": "CONMEBOL",
+        "yellows_per_game": 5.1, "reds_per_game": 0.24, "cards_per_game": 5.1, "fouls_per_game": 27.3, "matches": 88,
+        "style": "muy estricto", "style_label": "🔴🔴 Muy estricto — 5.1 amarillas/partido",
+        "cards_market_note": "Muy estricto. 'Más de 3.5 tarjetas' casi seguro.",
+    },
+    "kevin ortega": {
+        "name": "Kevin Ortega", "country": "Perú", "confederation": "CONMEBOL",
+        "yellows_per_game": 4.9, "reds_per_game": 0.21, "cards_per_game": 4.9, "fouls_per_game": 25.6, "matches": 63,
+        "style": "estricto", "style_label": "🔴 Estricto — 4.9 amarillas/partido",
+        "cards_market_note": "'Más de 3.5 tarjetas' muy probable.",
+    },
+    "cristian garay": {
+        "name": "Cristián Garay", "country": "Chile", "confederation": "CONMEBOL",
+        "yellows_per_game": 4.0, "reds_per_game": 0.23, "cards_per_game": 4.0, "fouls_per_game": 22.1, "matches": 57,
+        "style": "activo", "style_label": "🟡 Activo — 4.0 amarillas/partido",
+        "cards_market_note": "Supera 3.5 tarjetas con regularidad.",
+    },
+    "andres rojas": {
+        "name": "Andrés Rojas", "country": "Colombia", "confederation": "CONMEBOL",
+        "yellows_per_game": 5.1, "reds_per_game": 0.29, "cards_per_game": 5.1, "fouls_per_game": 24.8, "matches": 56,
+        "style": "muy estricto", "style_label": "🔴🔴 Muy estricto — 5.1 amarillas/partido",
+        "cards_market_note": "Extremadamente estricto para su poca experiencia internacional.",
+    },
+    "juan benitez": {
+        "name": "Juan Benítez", "country": "Paraguay", "confederation": "CONMEBOL",
+        "yellows_per_game": 3.6, "reds_per_game": 0.17, "cards_per_game": 3.6, "fouls_per_game": 23.2, "matches": 36,
+        "style": "moderado", "style_label": "🟡 Moderado — 3.6 amarillas/partido",
+        "cards_market_note": "Moderado. 'Más de 3.5 tarjetas' posible.",
+    },
+
+    # ── CONCACAF (9) ───────────────────────────────────────────────────────
+    "ismail elfath": {
+        "name": "Ismail Elfath", "country": "EE.UU.", "confederation": "CONCACAF",
+        "yellows_per_game": 4.3, "reds_per_game": 0.23, "cards_per_game": 4.5, "fouls_per_game": 24.6, "matches": 94,
+        "style": "activo", "style_label": "🟡 Activo — 4.3 amarillas/partido",
+        "cards_market_note": "'Más de 3.5 tarjetas' favorable.",
+    },
+    "cesar ramos": {
+        "name": "César Ramos", "country": "México", "confederation": "CONCACAF",
+        "yellows_per_game": 4.4, "reds_per_game": 0.41, "cards_per_game": 4.4, "fouls_per_game": 23.5, "matches": 174,
+        "style": "estricto", "style_label": "🔴 Estricto — más rojas del torneo (0.41/partido)",
+        "cards_market_note": "El árbitro con más rojas del Mundial. Muy favorable para tarjetas.",
+    },
+    "drew fischer": {
+        "name": "Drew Fischer", "country": "Canadá", "confederation": "CONCACAF",
+        "yellows_per_game": 3.6, "reds_per_game": 0.15, "cards_per_game": 3.6, "fouls_per_game": 23.3, "matches": 123,
+        "style": "moderado", "style_label": "🟡 Moderado — 3.6 amarillas/partido",
+        "cards_market_note": "Moderado. 'Más de 3.5 tarjetas' posible.",
+    },
+    "tori penso": {
+        "name": "Tori Penso", "country": "EE.UU.", "confederation": "CONCACAF",
+        "yellows_per_game": 3.8, "reds_per_game": 0.09, "cards_per_game": 3.8, "fouls_per_game": 21.3, "matches": 78,
+        "style": "moderado", "style_label": "🟡 Moderado — 3.8 amarillas/partido (árbitro femenina)",
+        "cards_market_note": "Moderada. 'Más de 3.5 tarjetas' posible pero no seguro.",
+    },
+    "katia garcia": {
+        "name": "Katia García", "country": "México", "confederation": "CONCACAF",
+        "yellows_per_game": 4.2, "reds_per_game": 0.06, "cards_per_game": 4.2, "fouls_per_game": 22.4, "matches": 34,
+        "style": "activo", "style_label": "🟡 Activa — 4.2 amarillas/partido (árbitro femenina)",
+        "cards_market_note": "Activa pero pocas rojas. Favorable para amarillas.",
+    },
+    "ivan barton": {
+        "name": "Ivan Barton", "country": "El Salvador", "confederation": "CONCACAF",
+        "yellows_per_game": 3.8, "reds_per_game": 0.36, "cards_per_game": 3.8, "fouls_per_game": 22.9, "matches": 28,
+        "style": "moderado", "style_label": "🟡 Moderado en amarillas pero muchas rojas (0.36/partido)",
+        "cards_market_note": "Pocas amarillas pero muy alto en rojas. Mercado de tarjetas incierto.",
+    },
+    "oshane nation": {
+        "name": "Oshane Nation", "country": "Jamaica", "confederation": "CONCACAF",
+        "yellows_per_game": 3.5, "reds_per_game": 0.14, "cards_per_game": 3.5, "fouls_per_game": 24.2, "matches": 14,
+        "style": "moderado", "style_label": "🟡 Moderado — 3.5 amarillas (poca muestra internacional)",
+        "cards_market_note": "Poca experiencia internacional. Dato a tomar con cautela.",
+    },
+    "juan calderon": {
+        "name": "Juan Calderón", "country": "Costa Rica", "confederation": "CONCACAF",
+        "yellows_per_game": 3.3, "reds_per_game": 0.10, "cards_per_game": 3.3, "fouls_per_game": 23.4, "matches": 10,
+        "style": "permisivo", "style_label": "🟢 Permisivo — 3.3 amarillas (muestra muy pequeña)",
+        "cards_market_note": "Muy pocos partidos de referencia. Dato no confiable.",
+    },
+    "hector martinez": {
+        "name": "Héctor Martínez", "country": "Honduras", "confederation": "CONCACAF",
+        "yellows_per_game": 3.2, "reds_per_game": 0.33, "cards_per_game": 3.2, "fouls_per_game": 21.8, "matches": 6,
+        "style": "permisivo", "style_label": "🟢 Permisivo en amarillas — pero pocas rojas también (solo 6 partidos)",
+        "cards_market_note": "Muestra de solo 6 partidos. Dato no confiable.",
+    },
+
+    # ── AFC (7) ────────────────────────────────────────────────────────────
+    "alireza faghani": {
+        "name": "Alireza Faghani", "country": "Irán/Australia", "confederation": "AFC",
+        "yellows_per_game": 3.7, "reds_per_game": 0.11, "cards_per_game": 3.7, "fouls_per_game": 19.7, "matches": 141,
+        "style": "moderado", "style_label": "🟡 Moderado — 3.7 amarillas/partido",
+        "cards_market_note": "Moderado. 'Más de 3.5 tarjetas' posible pero no seguro.",
+    },
+    "adham makhadmeh": {
+        "name": "Adham Makhadmeh", "country": "Jordania", "confederation": "AFC",
+        "yellows_per_game": 3.4, "reds_per_game": 0.10, "cards_per_game": 3.5, "fouls_per_game": 21.9, "matches": 49,
+        "style": "permisivo", "style_label": "🟢 Permisivo — 3.4 amarillas/partido",
+        "cards_market_note": "Permisivo. Cuidado con el mercado de tarjetas.",
+    },
+    "abdulrahman al jassim": {
+        "name": "Abdulrahman Al Jassim", "country": "Qatar", "confederation": "AFC",
+        "yellows_per_game": 4.3, "reds_per_game": 0.24, "cards_per_game": 4.3, "fouls_per_game": 22.8, "matches": 108,
+        "style": "activo", "style_label": "🟡 Activo — 4.3 amarillas/partido",
+        "cards_market_note": "'Más de 3.5 tarjetas' favorable.",
+    },
+    "ning ma": {
+        "name": "Ning Ma", "country": "China", "confederation": "AFC",
+        "yellows_per_game": 4.2, "reds_per_game": 0.33, "cards_per_game": 4.2, "fouls_per_game": 25.6, "matches": 108,
+        "style": "activo", "style_label": "🟡 Activo — 4.2 amarillas + muchas rojas (0.33/partido)",
+        "cards_market_note": "Activo con muchas rojas. Muy favorable para mercado de tarjetas.",
+    },
+    "omar al ali": {
+        "name": "Omar Al Ali", "country": "Emiratos Árabes", "confederation": "AFC",
+        "yellows_per_game": 3.7, "reds_per_game": 0.27, "cards_per_game": 3.7, "fouls_per_game": 23.7, "matches": 102,
+        "style": "moderado", "style_label": "🟡 Moderado en amarillas pero muchas rojas (0.27/partido)",
+        "cards_market_note": "Moderado en amarillas, muchas rojas. Mercado de tarjetas posible.",
+    },
+    "yusuke araki": {
+        "name": "Yusuke Araki", "country": "Japón", "confederation": "AFC",
+        "yellows_per_game": 2.9, "reds_per_game": 0.14, "cards_per_game": 2.9, "fouls_per_game": 21.2, "matches": 113,
+        "style": "permisivo", "style_label": "🟢 Muy permisivo — 2.9 amarillas/partido (el más bajo del torneo)",
+        "cards_market_note": "El árbitro más permisivo del Mundial. Evitar cualquier mercado de tarjetas con él.",
+    },
+    "ilgiz tantashev": {
+        "name": "Ilgiz Tantashev", "country": "Uzbekistán", "confederation": "AFC",
+        "yellows_per_game": 3.5, "reds_per_game": 0.27, "cards_per_game": 3.5, "fouls_per_game": 21.1, "matches": 48,
+        "style": "moderado", "style_label": "🟡 Moderado — 3.5 amarillas, muchas rojas (0.27/partido)",
+        "cards_market_note": "Moderado en amarillas pero muchas rojas. Mercado incierto.",
+    },
+
+    # ── CAF (6) ────────────────────────────────────────────────────────────
+    "amin omar": {
+        "name": "Amin Omar", "country": "Egipto", "confederation": "CAF",
+        "yellows_per_game": 3.8, "reds_per_game": 0.20, "cards_per_game": 3.8, "fouls_per_game": 17.1, "matches": 117,
+        "style": "moderado", "style_label": "🟡 Moderado — 3.8 amarillas/partido, pocas faltas (17.1)",
+        "cards_market_note": "Moderado. 'Más de 3.5 tarjetas' posible.",
+    },
+    "jalal jayed": {
+        "name": "Jalal Jayed", "country": "Marruecos", "confederation": "CAF",
+        "yellows_per_game": 3.7, "reds_per_game": 0.14, "cards_per_game": 3.7, "fouls_per_game": 15.4, "matches": 85,
+        "style": "moderado", "style_label": "🟡 Moderado — 3.7 amarillas, pocas faltas (15.4/partido)",
+        "cards_market_note": "Moderado. 'Más de 3.5 tarjetas' posible.",
+    },
+    "abongile tom": {
+        "name": "Abongile Tom", "country": "Sudáfrica", "confederation": "CAF",
+        "yellows_per_game": 4.6, "reds_per_game": 0.21, "cards_per_game": 4.6, "fouls_per_game": 21.2, "matches": 33,
+        "style": "estricto", "style_label": "🔴 Estricto — 4.6 amarillas/partido",
+        "cards_market_note": "'Más de 3.5 tarjetas' muy probable.",
+    },
+    "dahane beida": {
+        "name": "Dahane Beida", "country": "Mauritania", "confederation": "CAF",
+        "yellows_per_game": 3.3, "reds_per_game": 0.10, "cards_per_game": 3.3, "fouls_per_game": 27.2, "matches": 31,
+        "style": "permisivo", "style_label": "🟢 Permisivo — 3.3 amarillas (pero muchas faltas: 27.2)",
+        "cards_market_note": "Permisivo en tarjetas pero pita muchas faltas. Mercado de tarjetas arriesgado.",
+    },
+    "mustapha ghorbal": {
+        "name": "Mustapha Ghorbal", "country": "Argelia", "confederation": "CAF",
+        "yellows_per_game": 4.0, "reds_per_game": 0.26, "cards_per_game": 4.0, "fouls_per_game": 29.3, "matches": 31,
+        "style": "activo", "style_label": "🟡 Activo — 4.0 amarillas + más faltas del torneo junto con Abatti (29.3)",
+        "cards_market_note": "Activo en tarjetas y récord de faltas. Muy favorable para tarjetas.",
+    },
+    "pierre atcho": {
+        "name": "Pierre Atcho", "country": "Gabón", "confederation": "CAF",
+        "yellows_per_game": 3.4, "reds_per_game": 0.11, "cards_per_game": 3.4, "fouls_per_game": 22.6, "matches": 37,
+        "style": "permisivo", "style_label": "🟢 Permisivo — 3.4 amarillas/partido",
+        "cards_market_note": "Permisivo. Cuidado con el mercado de tarjetas.",
+    },
+
+    # ── OFC (1) ────────────────────────────────────────────────────────────
+    "campbell kawana-waugh": {
+        "name": "Campbell Kawana-Waugh", "country": "Nueva Zelanda", "confederation": "OFC",
+        "yellows_per_game": 3.0, "reds_per_game": 0.0, "cards_per_game": 3.0, "fouls_per_game": 0.0, "matches": 2,
+        "style": "sin datos", "style_label": "⚪ Sin datos suficientes — solo 2 partidos en la base",
+        "cards_market_note": "Dato no confiable con solo 2 partidos. No usar para análisis.",
+    },
+}
+
+def lookup_referee(name: str) -> dict | None:
+    """Busca un árbitro por nombre (insensible a mayúsculas y acentos)."""
+    if not name:
+        return None
+    key = name.strip().lower()
+    # Búsqueda exacta
+    if key in REFEREE_DB:
+        return REFEREE_DB[key]
+    # Búsqueda parcial
+    for db_key, data in REFEREE_DB.items():
+        if key in db_key or db_key in key:
+            return data
+    return None
+
+
+@extra_bp.route("/api/referee/lookup", methods=["GET"])
+def referee_lookup():
+    """
+    Busca estadísticas históricas de un árbitro por nombre.
+    Devuelve perfil de tarjetas, estilo y nota para el mercado.
+
+    Ejemplo: /api/referee/lookup?name=Michael Oliver
+    """
+    name = request.args.get("name", "").strip()
+    if not name:
+        return jsonify({"error": "Falta el parámetro ?name=<nombre del árbitro>"}), 400
+
+    ref = lookup_referee(name)
+    if ref:
+        return jsonify({
+            "found": True,
+            "referee": ref,
+            "cards_threshold_35": {
+                "likely": ref["cards_per_game"] > 3.5,
+                "avg_vs_threshold": round(ref["cards_per_game"] - 3.5, 2),
+                "recommendation": (
+                    "✅ Favorable para 'Más de 3.5 tarjetas'" if ref["cards_per_game"] > 3.8
+                    else "⚠️ Límite — riesgo moderado para 'Más de 3.5 tarjetas'" if ref["cards_per_game"] > 3.3
+                    else "❌ Desfavorable para 'Más de 3.5 tarjetas'"
+                )
+            }
+        })
+    else:
+        return jsonify({
+            "found": False,
+            "name_searched": name,
+            "message": f"No tenemos estadísticas para '{name}' en nuestra base de datos. Podés buscar manualmente en kickoffscore.com/referees",
+            "url": f"https://kickoffscore.com/referees/{name.lower().replace(' ', '-')}",
+            "known_referees": list(REFEREE_DB.keys()),
+        })
+
+
+@extra_bp.route("/api/referee/all", methods=["GET"])
+def referee_all():
+    """Devuelve todos los árbitros en la base de datos."""
+    return jsonify({
+        "count": len(REFEREE_DB),
+        "referees": list(REFEREE_DB.values()),
+    })

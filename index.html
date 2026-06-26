@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_5.html -->
+<!-- saved from url=(0043)file:///C:/Users/PC/Downloads/index_14.html -->
 <html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pizarra — Análisis de fútbol</title>
 <link rel="preconnect" href="https://fonts.googleapis.com/">
-<link href="./index_5_files/css2" rel="stylesheet">
+<link href="./index_14_files/css2" rel="stylesheet">
 <style>
 :root{
   --field-night:#FAFAF7;
@@ -232,16 +232,16 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--field-line);f
       <div class="sub">Análisis estadístico de fútbol — uso personal, no es asesoramiento financiero</div>
     </div>
     <div class="conn-status">
-      <span class="conn-dot bad" id="connDot"></span>
-      <span id="connText">backend no configurado</span>
+      <span class="conn-dot ok" id="connDot"></span>
+      <span id="connText">backend conectado</span>
     </div>
   </div>
 
   <div class="controls">
-    <select class="field-select" id="competitionSelect"></select>
-    <input class="field-input" id="teamInput" placeholder="Nombre del equipo (ej: Arsenal)">
+    <select class="field-select" id="competitionSelect"><optgroup label="Ligas de clubes"><option value="BL1">Bundesliga (Alemania)</option><option value="BSA">Campeonato Brasileiro Série A</option><option value="DED">Eredivisie (Países Bajos)</option><option value="ELC">Championship (Inglaterra, 2da div.)</option><option value="FL1">Ligue 1 (Francia)</option><option value="PD">La Liga (España)</option><option value="PL">Premier League (Inglaterra)</option><option value="PPL">Primeira Liga (Portugal)</option><option value="SA">Serie A (Italia)</option></optgroup><optgroup label="Selecciones y copas"><option value="CL">Champions League</option><option value="CLI">Copa Libertadores</option><option value="EC">Eurocopa (Selecciones)</option><option value="WC">FIFA World Cup (Selecciones)</option></optgroup></select>
+    <input class="field-input" id="teamInput" placeholder="Nombre del equipo (ej: Arsenal)" style="display: none;">
     <input class="field-input" id="team2Input" placeholder="Rival (solo para Cara a cara, ej: Chelsea)" style="display:none;">
-    <select class="field-select" id="confedSelect" style="display:none;"><option value="south_america">CONMEBOL (Sudamérica)</option><option value="europe">UEFA (Europa)</option><option value="africa">CAF (África)</option><option value="asia">AFC (Asia)</option><option value="concacaf">CONCACAF (Norte/Centroamérica y Caribe)</option><option value="oceania">OFC (Oceanía)</option><option value="south_america">CONMEBOL (Sudamérica)</option><option value="europe">UEFA (Europa)</option><option value="africa">CAF (África)</option><option value="asia">AFC (Asia)</option><option value="concacaf">CONCACAF (Norte/Centroamérica y Caribe)</option><option value="oceania">OFC (Oceanía)</option></select>
+    <select class="field-select" id="confedSelect" style="display:none;"><option value="south_america">CONMEBOL (Sudamérica)</option><option value="europe">UEFA (Europa)</option><option value="africa">CAF (África)</option><option value="asia">AFC (Asia)</option><option value="concacaf">CONCACAF (Norte/Centroamérica y Caribe)</option><option value="oceania">OFC (Oceanía)</option><option value="south_america">CONMEBOL (Sudamérica)</option><option value="europe">UEFA (Europa)</option><option value="africa">CAF (África)</option><option value="asia">AFC (Asia)</option><option value="concacaf">CONCACAF (Norte/Centroamérica y Caribe)</option><option value="oceania">OFC (Oceanía)</option><option value="south_america">CONMEBOL (Sudamérica)</option><option value="europe">UEFA (Europa)</option><option value="africa">CAF (África)</option><option value="asia">AFC (Asia)</option><option value="concacaf">CONCACAF (Norte/Centroamérica y Caribe)</option><option value="oceania">OFC (Oceanía)</option></select>
     <select class="field-select" id="trendsCompFilter" style="display:none;">
       <option value="">Todas las competiciones</option>
     </select>
@@ -251,7 +251,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--field-line);f
       <option value="3">Últimos 3</option>
     </select>
     <button class="btn" id="loadBtn">Cargar</button>
-    <button class="btn ghost" id="backendUrlBtn" title="Cambiar URL del backend">backend</button>
+    <button class="btn ghost" id="backendUrlBtn" title="Cambiar URL del backend">backend: analisis-futbol.onrender.com</button>
   </div>
 
   <div class="tabs">
@@ -267,7 +267,299 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--field-line);f
     <button class="tab" data-tab="odds" style="color:var(--grass);font-weight:600;">📊 Cuotas en vivo</button>
   </div>
 
-  <div class="panel active" id="panel-standings"></div>
+  <div class="panel active" id="panel-standings">
+        <div class="section-label">Premier League (Inglaterra) — temporada 2025</div>
+        
+    <table>
+      <thead><tr>
+        <th class="num">#</th><th>Equipo</th><th class="num">PJ</th><th class="num">G</th>
+        <th class="num">E</th><th class="num">P</th>
+        <th class="num">GF:GC</th><th class="num">DG</th>
+        <th class="num">Pts</th>
+        <th>Forma</th>
+      </tr></thead>
+      <tbody>
+    <tr>
+      <td class="num"><div class="pos-cell"><span class="pos-num">1</span></div></td>
+      <td><div class="pos-cell">
+        <img class="crest" src="./index_14_files/57.png" loading="lazy" onerror="this.style.display=&#39;none&#39;">
+        <span class="team-name">Arsenal</span>
+      </div></td>
+      <td class="num">38</td>
+      <td class="num">26</td>
+      <td class="num">7</td>
+      <td class="num">5</td>
+      <td class="num">71:27</td><td class="num">+44</td>
+      <td class="num pts">85</td>
+      <td><div class="form-pills"><span class="pill W">W</span><span class="pill W">W</span><span class="pill W">W</span><span class="pill W">W</span><span class="pill W">W</span></div></td>
+    </tr>
+    <tr>
+      <td class="num"><div class="pos-cell"><span class="pos-num">2</span></div></td>
+      <td><div class="pos-cell">
+        <img class="crest" src="./index_14_files/65.png" loading="lazy" onerror="this.style.display=&#39;none&#39;">
+        <span class="team-name">Man City</span>
+      </div></td>
+      <td class="num">38</td>
+      <td class="num">23</td>
+      <td class="num">9</td>
+      <td class="num">6</td>
+      <td class="num">77:35</td><td class="num">+42</td>
+      <td class="num pts">78</td>
+      <td><div class="form-pills"><span class="pill L">L</span><span class="pill D">D</span><span class="pill W">W</span><span class="pill W">W</span><span class="pill D">D</span></div></td>
+    </tr>
+    <tr>
+      <td class="num"><div class="pos-cell"><span class="pos-num">3</span></div></td>
+      <td><div class="pos-cell">
+        <img class="crest" src="./index_14_files/66.png" loading="lazy" onerror="this.style.display=&#39;none&#39;">
+        <span class="team-name">Man United</span>
+      </div></td>
+      <td class="num">38</td>
+      <td class="num">20</td>
+      <td class="num">11</td>
+      <td class="num">7</td>
+      <td class="num">69:50</td><td class="num">+19</td>
+      <td class="num pts">71</td>
+      <td><div class="form-pills"><span class="pill W">W</span><span class="pill W">W</span><span class="pill D">D</span><span class="pill W">W</span><span class="pill W">W</span></div></td>
+    </tr>
+    <tr>
+      <td class="num"><div class="pos-cell"><span class="pos-num">4</span></div></td>
+      <td><div class="pos-cell">
+        <img class="crest" src="./index_14_files/58.png" loading="lazy" onerror="this.style.display=&#39;none&#39;">
+        <span class="team-name">Aston Villa</span>
+      </div></td>
+      <td class="num">38</td>
+      <td class="num">19</td>
+      <td class="num">8</td>
+      <td class="num">11</td>
+      <td class="num">56:49</td><td class="num">+7</td>
+      <td class="num pts">65</td>
+      <td><div class="form-pills"><span class="pill W">W</span><span class="pill W">W</span><span class="pill D">D</span><span class="pill L">L</span><span class="pill L">L</span></div></td>
+    </tr>
+    <tr>
+      <td class="num"><div class="pos-cell"><span class="pos-num">5</span></div></td>
+      <td><div class="pos-cell">
+        <img class="crest" src="./index_14_files/64.png" loading="lazy" onerror="this.style.display=&#39;none&#39;">
+        <span class="team-name">Liverpool</span>
+      </div></td>
+      <td class="num">38</td>
+      <td class="num">17</td>
+      <td class="num">9</td>
+      <td class="num">12</td>
+      <td class="num">63:53</td><td class="num">+10</td>
+      <td class="num pts">60</td>
+      <td><div class="form-pills"><span class="pill D">D</span><span class="pill L">L</span><span class="pill D">D</span><span class="pill L">L</span><span class="pill W">W</span></div></td>
+    </tr>
+    <tr>
+      <td class="num"><div class="pos-cell"><span class="pos-num">6</span></div></td>
+      <td><div class="pos-cell">
+        <img class="crest" src="./index_14_files/bournemouth.png" loading="lazy" onerror="this.style.display=&#39;none&#39;">
+        <span class="team-name">Bournemouth</span>
+      </div></td>
+      <td class="num">38</td>
+      <td class="num">13</td>
+      <td class="num">18</td>
+      <td class="num">7</td>
+      <td class="num">58:54</td><td class="num">+4</td>
+      <td class="num pts">57</td>
+      <td><div class="form-pills"><span class="pill D">D</span><span class="pill D">D</span><span class="pill W">W</span><span class="pill W">W</span><span class="pill D">D</span></div></td>
+    </tr>
+    <tr>
+      <td class="num"><div class="pos-cell"><span class="pos-num">7</span></div></td>
+      <td><div class="pos-cell">
+        <img class="crest" src="./index_14_files/71.png" loading="lazy" onerror="this.style.display=&#39;none&#39;">
+        <span class="team-name">Sunderland</span>
+      </div></td>
+      <td class="num">38</td>
+      <td class="num">14</td>
+      <td class="num">12</td>
+      <td class="num">12</td>
+      <td class="num">42:48</td><td class="num">-6</td>
+      <td class="num pts">54</td>
+      <td><div class="form-pills"><span class="pill W">W</span><span class="pill W">W</span><span class="pill D">D</span><span class="pill D">D</span><span class="pill L">L</span></div></td>
+    </tr>
+    <tr>
+      <td class="num"><div class="pos-cell"><span class="pos-num">8</span></div></td>
+      <td><div class="pos-cell">
+        <img class="crest" src="./index_14_files/397.png" loading="lazy" onerror="this.style.display=&#39;none&#39;">
+        <span class="team-name">Brighton Hove</span>
+      </div></td>
+      <td class="num">38</td>
+      <td class="num">14</td>
+      <td class="num">11</td>
+      <td class="num">13</td>
+      <td class="num">52:46</td><td class="num">+6</td>
+      <td class="num pts">53</td>
+      <td><div class="form-pills"><span class="pill L">L</span><span class="pill L">L</span><span class="pill W">W</span><span class="pill L">L</span><span class="pill W">W</span></div></td>
+    </tr>
+    <tr>
+      <td class="num"><div class="pos-cell"><span class="pos-num">9</span></div></td>
+      <td><div class="pos-cell">
+        <img class="crest" src="./index_14_files/402.png" loading="lazy" onerror="this.style.display=&#39;none&#39;">
+        <span class="team-name">Brentford</span>
+      </div></td>
+      <td class="num">38</td>
+      <td class="num">14</td>
+      <td class="num">11</td>
+      <td class="num">13</td>
+      <td class="num">55:52</td><td class="num">+3</td>
+      <td class="num pts">53</td>
+      <td><div class="form-pills"><span class="pill D">D</span><span class="pill D">D</span><span class="pill L">L</span><span class="pill W">W</span><span class="pill L">L</span></div></td>
+    </tr>
+    <tr>
+      <td class="num"><div class="pos-cell"><span class="pos-num">10</span></div></td>
+      <td><div class="pos-cell">
+        <img class="crest" src="./index_14_files/61.png" loading="lazy" onerror="this.style.display=&#39;none&#39;">
+        <span class="team-name">Chelsea</span>
+      </div></td>
+      <td class="num">38</td>
+      <td class="num">14</td>
+      <td class="num">10</td>
+      <td class="num">14</td>
+      <td class="num">58:52</td><td class="num">+6</td>
+      <td class="num pts">52</td>
+      <td><div class="form-pills"><span class="pill L">L</span><span class="pill W">W</span><span class="pill D">D</span><span class="pill L">L</span><span class="pill L">L</span></div></td>
+    </tr>
+    <tr>
+      <td class="num"><div class="pos-cell"><span class="pos-num">11</span></div></td>
+      <td><div class="pos-cell">
+        <img class="crest" src="./index_14_files/63.png" loading="lazy" onerror="this.style.display=&#39;none&#39;">
+        <span class="team-name">Fulham</span>
+      </div></td>
+      <td class="num">38</td>
+      <td class="num">15</td>
+      <td class="num">7</td>
+      <td class="num">16</td>
+      <td class="num">47:51</td><td class="num">-4</td>
+      <td class="num pts">52</td>
+      <td><div class="form-pills"><span class="pill W">W</span><span class="pill D">D</span><span class="pill L">L</span><span class="pill L">L</span><span class="pill W">W</span></div></td>
+    </tr>
+    <tr>
+      <td class="num"><div class="pos-cell"><span class="pos-num">12</span></div></td>
+      <td><div class="pos-cell">
+        <img class="crest" src="./index_14_files/67.png" loading="lazy" onerror="this.style.display=&#39;none&#39;">
+        <span class="team-name">Newcastle</span>
+      </div></td>
+      <td class="num">38</td>
+      <td class="num">14</td>
+      <td class="num">7</td>
+      <td class="num">17</td>
+      <td class="num">53:55</td><td class="num">-2</td>
+      <td class="num pts">49</td>
+      <td><div class="form-pills"><span class="pill L">L</span><span class="pill W">W</span><span class="pill D">D</span><span class="pill W">W</span><span class="pill L">L</span></div></td>
+    </tr>
+    <tr>
+      <td class="num"><div class="pos-cell"><span class="pos-num">13</span></div></td>
+      <td><div class="pos-cell">
+        <img class="crest" src="./index_14_files/62.png" loading="lazy" onerror="this.style.display=&#39;none&#39;">
+        <span class="team-name">Everton</span>
+      </div></td>
+      <td class="num">38</td>
+      <td class="num">13</td>
+      <td class="num">10</td>
+      <td class="num">15</td>
+      <td class="num">47:50</td><td class="num">-3</td>
+      <td class="num pts">49</td>
+      <td><div class="form-pills"><span class="pill L">L</span><span class="pill L">L</span><span class="pill D">D</span><span class="pill D">D</span><span class="pill L">L</span></div></td>
+    </tr>
+    <tr>
+      <td class="num"><div class="pos-cell"><span class="pos-num">14</span></div></td>
+      <td><div class="pos-cell">
+        <img class="crest" src="./index_14_files/341.png" loading="lazy" onerror="this.style.display=&#39;none&#39;">
+        <span class="team-name">Leeds United</span>
+      </div></td>
+      <td class="num">38</td>
+      <td class="num">11</td>
+      <td class="num">14</td>
+      <td class="num">13</td>
+      <td class="num">49:56</td><td class="num">-7</td>
+      <td class="num pts">47</td>
+      <td><div class="form-pills"><span class="pill L">L</span><span class="pill W">W</span><span class="pill D">D</span><span class="pill W">W</span><span class="pill D">D</span></div></td>
+    </tr>
+    <tr>
+      <td class="num"><div class="pos-cell"><span class="pos-num">15</span></div></td>
+      <td><div class="pos-cell">
+        <img class="crest" src="./index_14_files/354.png" loading="lazy" onerror="this.style.display=&#39;none&#39;">
+        <span class="team-name">Crystal Palace</span>
+      </div></td>
+      <td class="num">38</td>
+      <td class="num">11</td>
+      <td class="num">12</td>
+      <td class="num">15</td>
+      <td class="num">41:51</td><td class="num">-10</td>
+      <td class="num pts">45</td>
+      <td><div class="form-pills"><span class="pill L">L</span><span class="pill D">D</span><span class="pill L">L</span><span class="pill D">D</span><span class="pill L">L</span></div></td>
+    </tr>
+    <tr>
+      <td class="num"><div class="pos-cell"><span class="pos-num">16</span></div></td>
+      <td><div class="pos-cell">
+        <img class="crest" src="./index_14_files/351.png" loading="lazy" onerror="this.style.display=&#39;none&#39;">
+        <span class="team-name">Nottingham</span>
+      </div></td>
+      <td class="num">38</td>
+      <td class="num">11</td>
+      <td class="num">11</td>
+      <td class="num">16</td>
+      <td class="num">48:51</td><td class="num">-3</td>
+      <td class="num pts">44</td>
+      <td><div class="form-pills"><span class="pill D">D</span><span class="pill L">L</span><span class="pill D">D</span><span class="pill W">W</span><span class="pill W">W</span></div></td>
+    </tr>
+    <tr>
+      <td class="num"><div class="pos-cell"><span class="pos-num">17</span></div></td>
+      <td><div class="pos-cell">
+        <img class="crest" src="./index_14_files/73.png" loading="lazy" onerror="this.style.display=&#39;none&#39;">
+        <span class="team-name">Tottenham</span>
+      </div></td>
+      <td class="num">38</td>
+      <td class="num">10</td>
+      <td class="num">11</td>
+      <td class="num">17</td>
+      <td class="num">48:57</td><td class="num">-9</td>
+      <td class="num pts">41</td>
+      <td><div class="form-pills"><span class="pill W">W</span><span class="pill L">L</span><span class="pill D">D</span><span class="pill W">W</span><span class="pill W">W</span></div></td>
+    </tr>
+    <tr>
+      <td class="num"><div class="pos-cell"><span class="pos-num">18</span></div></td>
+      <td><div class="pos-cell">
+        <img class="crest" src="./index_14_files/563.png" loading="lazy" onerror="this.style.display=&#39;none&#39;">
+        <span class="team-name">West Ham</span>
+      </div></td>
+      <td class="num">38</td>
+      <td class="num">10</td>
+      <td class="num">9</td>
+      <td class="num">19</td>
+      <td class="num">46:65</td><td class="num">-19</td>
+      <td class="num pts">39</td>
+      <td><div class="form-pills"><span class="pill W">W</span><span class="pill L">L</span><span class="pill L">L</span><span class="pill L">L</span><span class="pill W">W</span></div></td>
+    </tr>
+    <tr>
+      <td class="num"><div class="pos-cell"><span class="pos-num">19</span></div></td>
+      <td><div class="pos-cell">
+        <img class="crest" src="./index_14_files/328.png" loading="lazy" onerror="this.style.display=&#39;none&#39;">
+        <span class="team-name">Burnley</span>
+      </div></td>
+      <td class="num">38</td>
+      <td class="num">4</td>
+      <td class="num">10</td>
+      <td class="num">24</td>
+      <td class="num">38:75</td><td class="num">-37</td>
+      <td class="num pts">22</td>
+      <td><div class="form-pills"><span class="pill D">D</span><span class="pill L">L</span><span class="pill D">D</span><span class="pill L">L</span><span class="pill L">L</span></div></td>
+    </tr>
+    <tr>
+      <td class="num"><div class="pos-cell"><span class="pos-num">20</span></div></td>
+      <td><div class="pos-cell">
+        <img class="crest" src="./index_14_files/76.png" loading="lazy" onerror="this.style.display=&#39;none&#39;">
+        <span class="team-name">Wolverhampton</span>
+      </div></td>
+      <td class="num">38</td>
+      <td class="num">3</td>
+      <td class="num">11</td>
+      <td class="num">24</td>
+      <td class="num">27:68</td><td class="num">-41</td>
+      <td class="num pts">20</td>
+      <td><div class="form-pills"><span class="pill D">D</span><span class="pill D">D</span><span class="pill L">L</span><span class="pill D">D</span><span class="pill L">L</span></div></td>
+    </tr></tbody>
+    </table></div>
   <div class="panel" id="panel-matches"></div>
   <div class="panel" id="panel-trends"></div>
   <div class="panel" id="panel-h2h"></div>
@@ -498,6 +790,10 @@ document.querySelectorAll('.tab').forEach(tab => {
     tab.classList.add('active');
     currentTab = tab.dataset.tab;
     document.getElementById('panel-' + currentTab).classList.add('active');
+    // Al abrir Cuotas en vivo, forzar Mundial automáticamente
+    if (currentTab === 'odds' && competitionSelect.value !== 'WC') {
+      competitionSelect.value = 'WC';
+    }
     updateControlsVisibility();
     loadCurrentTab();
   });
@@ -2507,6 +2803,7 @@ async function loadOdds() {
 
 init();
 </script>
+
 
 
 </body></html>

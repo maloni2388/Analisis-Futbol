@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<!-- saved from url=(0043)file:///C:/Users/PC/Downloads/index_12.html -->
+<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_5.html -->
 <html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pizarra — Análisis de fútbol</title>
 <link rel="preconnect" href="https://fonts.googleapis.com/">
-<link href="./index_12_files/css2" rel="stylesheet">
+<link href="./index_5_files/css2" rel="stylesheet">
 <style>
 :root{
   --field-night:#FAFAF7;
@@ -233,7 +233,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--field-line);f
     </div>
     <div class="conn-status">
       <span class="conn-dot bad" id="connDot"></span>
-      <span id="connText">sin conexión</span>
+      <span id="connText">backend no configurado</span>
     </div>
   </div>
 
@@ -241,7 +241,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--field-line);f
     <select class="field-select" id="competitionSelect"></select>
     <input class="field-input" id="teamInput" placeholder="Nombre del equipo (ej: Arsenal)">
     <input class="field-input" id="team2Input" placeholder="Rival (solo para Cara a cara, ej: Chelsea)" style="display:none;">
-    <select class="field-select" id="confedSelect" style="display:none;"><option value="south_america">CONMEBOL (Sudamérica)</option><option value="europe">UEFA (Europa)</option><option value="africa">CAF (África)</option><option value="asia">AFC (Asia)</option><option value="concacaf">CONCACAF (Norte/Centroamérica y Caribe)</option><option value="oceania">OFC (Oceanía)</option><option value="south_america">CONMEBOL (Sudamérica)</option><option value="europe">UEFA (Europa)</option><option value="africa">CAF (África)</option><option value="asia">AFC (Asia)</option><option value="concacaf">CONCACAF (Norte/Centroamérica y Caribe)</option><option value="oceania">OFC (Oceanía)</option><option value="south_america">CONMEBOL (Sudamérica)</option><option value="europe">UEFA (Europa)</option><option value="africa">CAF (África)</option><option value="asia">AFC (Asia)</option><option value="concacaf">CONCACAF (Norte/Centroamérica y Caribe)</option><option value="oceania">OFC (Oceanía)</option></select>
+    <select class="field-select" id="confedSelect" style="display:none;"><option value="south_america">CONMEBOL (Sudamérica)</option><option value="europe">UEFA (Europa)</option><option value="africa">CAF (África)</option><option value="asia">AFC (Asia)</option><option value="concacaf">CONCACAF (Norte/Centroamérica y Caribe)</option><option value="oceania">OFC (Oceanía)</option><option value="south_america">CONMEBOL (Sudamérica)</option><option value="europe">UEFA (Europa)</option><option value="africa">CAF (África)</option><option value="asia">AFC (Asia)</option><option value="concacaf">CONCACAF (Norte/Centroamérica y Caribe)</option><option value="oceania">OFC (Oceanía)</option></select>
     <select class="field-select" id="trendsCompFilter" style="display:none;">
       <option value="">Todas las competiciones</option>
     </select>
@@ -267,7 +267,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--field-line);f
     <button class="tab" data-tab="odds" style="color:var(--grass);font-weight:600;">📊 Cuotas en vivo</button>
   </div>
 
-  <div class="panel active" id="panel-standings"><div class="error-box"><div class="err-title">No se pudo conectar con el backend</div>Revisá que la URL sea correcta y que el backend esté desplegado y corriendo: https://analisis-futbol.onrender.com. Si recién lo desplegaste en Render, puede tardar 30-50 segundos en "despertar" la primera vez. Detalle: Failed to fetch</div></div>
+  <div class="panel active" id="panel-standings"></div>
   <div class="panel" id="panel-matches"></div>
   <div class="panel" id="panel-trends"></div>
   <div class="panel" id="panel-h2h"></div>
@@ -2507,7 +2507,6 @@ async function loadOdds() {
 
 init();
 </script>
-
 
 
 </body></html>

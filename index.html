@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<!-- saved from url=(0043)file:///C:/Users/PC/Downloads/index_11.html -->
+<!-- saved from url=(0043)file:///C:/Users/PC/Downloads/index_12.html -->
 <html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pizarra — Análisis de fútbol</title>
 <link rel="preconnect" href="https://fonts.googleapis.com/">
-<link href="./index_11_files/css2" rel="stylesheet">
+<link href="./index_12_files/css2" rel="stylesheet">
 <style>
 :root{
   --field-night:#FAFAF7;
@@ -233,7 +233,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--field-line);f
     </div>
     <div class="conn-status">
       <span class="conn-dot bad" id="connDot"></span>
-      <span id="connText">backend no configurado</span>
+      <span id="connText">sin conexión</span>
     </div>
   </div>
 
@@ -267,7 +267,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--field-line);f
     <button class="tab" data-tab="odds" style="color:var(--grass);font-weight:600;">📊 Cuotas en vivo</button>
   </div>
 
-  <div class="panel active" id="panel-standings"><div class="error-box"><div class="err-title">Todavía no configuraste la URL de tu backend</div>Tocá el botón "backend" arriba a la derecha y pegá la URL que te dio Render (algo como https://tu-app.onrender.com). Se va a guardar en este navegador para la próxima vez.</div></div>
+  <div class="panel active" id="panel-standings"><div class="error-box"><div class="err-title">No se pudo conectar con el backend</div>Revisá que la URL sea correcta y que el backend esté desplegado y corriendo: https://analisis-futbol.onrender.com. Si recién lo desplegaste en Render, puede tardar 30-50 segundos en "despertar" la primera vez. Detalle: Failed to fetch</div></div>
   <div class="panel" id="panel-matches"></div>
   <div class="panel" id="panel-trends"></div>
   <div class="panel" id="panel-h2h"></div>
@@ -288,6 +288,11 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--field-line);f
 // la primera vez y la va a recordar en este navegador para la próxima.
 const DEFAULT_BACKEND_URL = 'https://analisis-futbol.onrender.com';
 
+// Limpiar cualquier URL inválida guardada previamente en localStorage
+const _saved = localStorage.getItem('pizarra_backend_url') || '';
+if (_saved.includes('CAMBIAR') || _saved === '') {
+  localStorage.setItem('pizarra_backend_url', DEFAULT_BACKEND_URL);
+}
 let BACKEND_URL = localStorage.getItem('pizarra_backend_url') || DEFAULT_BACKEND_URL;
 let currentCompetitions = {};
 let currentTab = 'standings';
@@ -558,16 +563,6 @@ function loadingBox(msg) {
 }
 
 async function init() {
-  if (BACKEND_URL === DEFAULT_BACKEND_URL) {
-    connDot.className = 'conn-dot bad';
-    connText.textContent = 'backend no configurado';
-    document.getElementById('panel-standings').innerHTML = errorBox(
-      'Todavía no configuraste la URL de tu backend',
-      'Tocá el botón "backend" arriba a la derecha y pegá la URL que te dio Render (algo como https://tu-app.onrender.com). Se va a guardar en este navegador para la próxima vez.'
-    );
-    return;
-  }
-
   connDot.className = 'conn-dot';
   connText.textContent = 'conectando con backend...';
   try {

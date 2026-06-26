@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_9.html -->
+<!-- saved from url=(0043)file:///C:/Users/PC/Downloads/index_10.html -->
 <html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pizarra — Análisis de fútbol</title>
 <link rel="preconnect" href="https://fonts.googleapis.com/">
-<link href="./index_9_files/css2" rel="stylesheet">
+<link href="./index_10_files/css2" rel="stylesheet">
 <style>
 :root{
   --field-night:#FAFAF7;
@@ -286,7 +286,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--field-line);f
 // por ejemplo: 'https://tu-app.onrender.com'
 // Si lo dejás así (con el placeholder), el dashboard te va a pedir la URL
 // la primera vez y la va a recordar en este navegador para la próxima.
-const DEFAULT_BACKEND_URL = 'https://CAMBIAR-POR-TU-URL-DE-RENDER.onrender.com';
+const DEFAULT_BACKEND_URL = 'https://analisis-futbol.onrender.com';
 
 let BACKEND_URL = localStorage.getItem('pizarra_backend_url') || DEFAULT_BACKEND_URL;
 let currentCompetitions = {};
@@ -2460,7 +2460,8 @@ async function loadRefereeForMatch(ev) {
           </div>
           <div style="font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--chalk-faint);margin-bottom:12px;">${escapeHtml(fecha)} · ${ev.bookmakers_count} casas</div>
 
-          <div id="ref-${ev.id || ev.home_team.replace(/\s/g,'')}" style="margin-bottom:10px;"></div>grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">
+          <div id="ref-${ev.id || ev.home_team.replace(/\s/g,'')}" style="margin-bottom:10px;"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">
             ${[[ev.home_team, h2h[ev.home_team], homeP],['Empate',h2h['Draw'],drawP],[ev.away_team,h2h[ev.away_team],awayP]].map(([n,o,p])=>`
               <div style="background:var(--field-panel-raised);border:1px solid var(--field-line);border-radius:3px;padding:10px;text-align:center;">
                 <div style="font-size:10px;color:var(--chalk-faint);margin-bottom:3px;font-family:'JetBrains Mono',monospace;">${escapeHtml(n)}</div>

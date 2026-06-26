@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_4.html -->
+<!-- saved from url=(0042)file:///C:/Users/PC/Downloads/index_5.html -->
 <html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pizarra — Análisis de fútbol</title>
 <link rel="preconnect" href="https://fonts.googleapis.com/">
-<link href="./index_4_files/css2" rel="stylesheet">
+<link href="./index_5_files/css2" rel="stylesheet">
 <style>
 :root{
   --field-night:#FAFAF7;
@@ -241,7 +241,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--field-line);f
     <select class="field-select" id="competitionSelect"></select>
     <input class="field-input" id="teamInput" placeholder="Nombre del equipo (ej: Arsenal)">
     <input class="field-input" id="team2Input" placeholder="Rival (solo para Cara a cara, ej: Chelsea)" style="display:none;">
-    <select class="field-select" id="confedSelect" style="display:none;"><option value="south_america">CONMEBOL (Sudamérica)</option><option value="europe">UEFA (Europa)</option><option value="africa">CAF (África)</option><option value="asia">AFC (Asia)</option><option value="concacaf">CONCACAF (Norte/Centroamérica y Caribe)</option><option value="oceania">OFC (Oceanía)</option></select>
+    <select class="field-select" id="confedSelect" style="display:none;"><option value="south_america">CONMEBOL (Sudamérica)</option><option value="europe">UEFA (Europa)</option><option value="africa">CAF (África)</option><option value="asia">AFC (Asia)</option><option value="concacaf">CONCACAF (Norte/Centroamérica y Caribe)</option><option value="oceania">OFC (Oceanía)</option><option value="south_america">CONMEBOL (Sudamérica)</option><option value="europe">UEFA (Europa)</option><option value="africa">CAF (África)</option><option value="asia">AFC (Asia)</option><option value="concacaf">CONCACAF (Norte/Centroamérica y Caribe)</option><option value="oceania">OFC (Oceanía)</option></select>
     <select class="field-select" id="trendsCompFilter" style="display:none;">
       <option value="">Todas las competiciones</option>
     </select>
@@ -1205,6 +1205,17 @@ function renderPreviewTable(nextFixture, rivalInfo, matches, usedAll) {
             { txt: 'Más de 6', fn: m => (m.shots_on_goal??0) > 6 },
           ]
         )}
+        ${(() => {
+          const avgShotsTotal = avg(m => m.shots_total);
+          return row('🔫 Remates totales (propios)', 'medium',
+            `Promedio: ${avgShotsTotal} · Mercado similar al ticket "Más/Menos de X.5 remates"`,
+            [
+              { txt: `Más de 8`,  fn: m => (m.shots_total??0) > 8  },
+              { txt: `Más de 11`, fn: m => (m.shots_total??0) > 11 },
+              { txt: `Menos de 15`, fn: m => (m.shots_total??0) < 15 },
+            ]
+          );
+        })()}
       </tbody>
     </table>
     <div class="sub" style="font-size:11px;color:var(--chalk-faint);margin:-4px 0 12px;font-family:'JetBrains Mono',monospace;line-height:1.8;">
@@ -1499,6 +1510,84 @@ function renderAdvancedBlock(teamMatch, avgData, leagueId, isNationalTeamTab, co
       </div>
       <div class="sub" style="font-size:11px;color:var(--chalk-faint);margin:-4px 0 8px;font-family:'JetBrains Mono',monospace;">
         Ejemplo de lectura: "¿Hubo más de 8 corners? → 50% → Pasó la mitad de las veces" significa que en 5 de los últimos 10 partidos el total de corners superó 8, y en los otros 5 no llegó a ese número. El promedio de ${sTotal.avg} y el rango ${sTotal.min}–${sTotal.max} muestran cuánto varía este dato partido a partido.
+      </div>`;
+    })()}
+
+    ${(() => {
+      // Análisis de remates totales (propios): umbrales "más de X" y "menos de X"
+      // inspirados en el ticket de parlay (Curazao >11.5, Ecuador <20.5)
+      const detailShots = avgData.per_match_detail.filter(m => m.shots_total != null);
+      if (detailShots.length < 2) return '';
+      const shotsOwn = detailShots.map(m => m.shots_total);
+      const shotsOn  = detailShots.map(m => m.shots_on_goal ?? 0);
+      const sAvg  = Math.round(shotsOwn.reduce((a,b)=>a+b,0)/shotsOwn.length*10)/10;
+      const sMin  = Math.min(...shotsOwn);
+      const sMax  = Math.max(...shotsOwn);
+      const sOnAvg = Math.round(shotsOn.reduce((a,b)=>a+b,0)/shotsOn.length*10)/10;
+      const n = detailShots.length;
+
+      function overP(arr, t) { const c=arr.filter(v=>v>t).length; return {count:c,total:arr.length,under:arr.length-c,pct:Math.round(c/arr.length*100)}; }
+      function underP(arr, t) { const c=arr.filter(v=>v<t).length; return {count:c,total:arr.length,pct:Math.round(c/arr.length*100)}; }
+
+      const thOver  = [5, 8, 11, 14, 17];
+      const thUnder = [20, 17, 15, 12];
+
+      // Umbral seguro: más alto con ≥75% para "más de", más bajo con ≥75% para "menos de"
+      const safestOver  = [...thOver].reverse().find(t => overP(shotsOwn,t).pct >= 75);
+      const safestUnder = thUnder.find(t => underP(shotsOwn,t).pct >= 75);
+
+      function barCard(pregunta, pct, over, total, under, t, tipo) {
+        const col = pct>=70 ? 'var(--grass)' : pct<=30 ? 'var(--card-red)' : 'var(--amber)';
+        const txt = pct>=70 ? 'Pasó casi siempre' : pct>=50 ? 'Pasó la mitad de las veces' : pct>=30 ? 'Pasó pocas veces' : 'Casi nunca pasó';
+        const suffix = tipo==='over'
+          ? `en ${over} de ${total} partidos hubo más de ${t} remates — en ${under} no llegó`
+          : `en ${over} de ${total} partidos hubo menos de ${t} remates`;
+        return `<div style="margin-bottom:8px;padding:10px 12px;background:var(--field-panel-raised);border:1px solid var(--field-line);border-radius:3px;">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;">
+            <span style="font-weight:600;font-size:13px;">${pregunta}</span>
+            <span style="font-size:20px;font-weight:700;color:${col}">${pct}%</span>
+          </div>
+          <div style="background:var(--field-line);border-radius:2px;height:6px;margin-bottom:5px;overflow:hidden;">
+            <div style="background:${col};width:${pct}%;height:100%;border-radius:2px;"></div>
+          </div>
+          <div style="font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--chalk-faint);">
+            <strong style="color:${col}">${txt}</strong> — ${suffix}
+          </div>
+        </div>`;
+      }
+
+      return `
+      <div class="section-label">🔫 Análisis de Remates — estilo ticket parlay (${n} partidos)</div>
+      <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:12px;">
+        <div class="stat-box"><div class="label">Promedio remates</div><div class="value amber">${sAvg}</div></div>
+        <div class="stat-box"><div class="label">Mínimo</div><div class="value">${sMin}</div></div>
+        <div class="stat-box"><div class="label">Máximo</div><div class="value">${sMax}</div></div>
+        <div class="stat-box"><div class="label">Al arco (prom.)</div><div class="value grass">${sOnAvg}</div></div>
+      </div>
+
+      ${safestOver != null || safestUnder != null ? `
+      <div style="background:var(--grass-dim);border:1px solid var(--grass);border-radius:4px;padding:12px 14px;margin-bottom:14px;">
+        <div style="font-family:'Oswald',sans-serif;font-size:12px;font-weight:600;color:var(--grass);margin-bottom:6px;">🎯 UMBRAL MÁS SEGURO PARA PARLAY</div>
+        ${safestOver != null ? `<div style="font-size:13px;margin-bottom:4px;">
+          ✅ <strong>Más de ${safestOver} remates</strong> — ocurrió ${overP(shotsOwn,safestOver).count}/${n} veces (${overP(shotsOwn,safestOver).pct}%)
+        </div>` : ''}
+        ${safestUnder != null ? `<div style="font-size:13px;">
+          ✅ <strong>Menos de ${safestUnder} remates</strong> — ocurrió ${underP(shotsOwn,safestUnder).count}/${n} veces (${underP(shotsOwn,safestUnder).pct}%)
+        </div>` : ''}
+        <div style="font-size:11px;color:var(--chalk-dim);font-family:'JetBrains Mono',monospace;margin-top:6px;">Umbral con ≥75% histórico — el más conservador para incluir en un parlay</div>
+      </div>` : ''}
+
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--chalk-faint);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">¿Más de X remates de este equipo? (estilo "Más de 11.5" del ticket)</div>
+      <div style="margin-bottom:12px;">
+        ${thOver.map(t => { const r=overP(shotsOwn,t); return barCard(`¿Más de ${t} remates totales?`, r.pct, r.count, r.total, r.under, t, 'over'); }).join('')}
+      </div>
+
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--chalk-faint);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">¿Menos de X remates de este equipo? (estilo "Menos de 20.5" del ticket)</div>
+      <div style="margin-bottom:10px;">
+        ${thUnder.map(t => { const r=underP(shotsOwn,t); return barCard(`¿Menos de ${t} remates totales?`, r.pct, r.count, r.total, r.total-r.count, t, 'under'); }).join('')}
+      </div>
+      <div class="sub" style="font-size:11px;color:var(--chalk-faint);margin:-4px 0 12px;font-family:'JetBrains Mono',monospace;">
+        📌 Estos son los remates <strong>de este equipo</strong>. Para analizar el total del partido (ambos equipos sumados, como en el ticket de tu amigo), usá la pestaña de comparación con dos equipos y sumá los promedios. El umbral "Más de 11.5 remates totales" del ticket incluía los remates del rival también.
       </div>`;
     })()}
 
@@ -1869,6 +1958,9 @@ const PARLAY_MARKETS = [
   { id: 'corners_gt8',         label: '📐 Corners totales >8',       trust: 'medium', fn: m => (m.corners??0)+(m.corners_against??0) > 8 },
   { id: 'fouls_gt10',          label: '🦶 Faltas >10',               trust: 'medium', fn: m => (m.fouls??0) > 10 },
   { id: 'shots_on_gt3',        label: '🎯 Remates al arco >3',       trust: 'medium', fn: m => (m.shots_on_goal??0) > 3 },
+  { id: 'shots_total_gt8',     label: '🔫 Remates totales equipo >8',  trust: 'medium', fn: m => (m.shots_total??0) > 8 },
+  { id: 'shots_total_gt11',    label: '🔫 Remates totales equipo >11', trust: 'medium', fn: m => (m.shots_total??0) > 11 },
+  { id: 'shots_total_gt14',    label: '🔫 Remates totales equipo >14', trust: 'medium', fn: m => (m.shots_total??0) > 14 },
 ];
 
 const TRUST_LABELS = {
